@@ -3,7 +3,7 @@ import Parser from "tree-sitter";
 import PythonGrammar from "tree-sitter-python";
 
 import { sha256Text } from "../../../contract/hash.js";
-import type { DefinitionKind } from "../../../contract/types.js";
+import type { DefinitionKind, Diagnostic, SourceFileInput } from "../../../contract/types.js";
 import {
   TreeSitterSyntaxAdapter,
   type CandidateExtraction,
@@ -50,6 +50,21 @@ export class PythonTreeSitterAdapter extends TreeSitterSyntaxAdapter {
       }
     }
     return output;
+  }
+
+  protected collectLanguageDiagnostics(
+    rootNode: Parser.SyntaxNode,
+    _definitions: RawDefinition[],
+    input: SourceFileInput,
+    offsetMap: DefinitionContext["offsetMap"],
+  ): Diagnostic[] {
+    return rootNode.descendantsOfType("lambda").filter((node) => node.isNamed).map((node) => ({
+      code: "unsupported_anonymous_definition",
+      severity: "info",
+      file_path: input.relative_path,
+      span: offsetMap.span(node),
+      message: "Anonymous lambda is not a V0.1 Definition",
+    }));
   }
 
   private candidatesForCapture(

@@ -138,3 +138,28 @@ test("empty/comment-only sources are complete and invalid inputs fail visibly", 
     AdapterUnavailableError,
   );
 });
+
+test("anonymous callables are diagnosed while stable callable bindings remain definitions", () => {
+  const typescript = extract(
+    new TypeScriptTreeSitterAdapter(),
+    "const stable = () => 1; consume(() => 2);\n",
+    "typescript",
+    "anonymous.ts",
+  );
+  assert.ok(typescript.definitions.some((definition) => definition.name === "stable"));
+  assert.equal(
+    typescript.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported_anonymous_definition").length,
+    1,
+  );
+
+  const python = extract(
+    new PythonTreeSitterAdapter(),
+    "consume(lambda value: value)\n",
+    "python",
+    "anonymous.py",
+  );
+  assert.equal(
+    python.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported_anonymous_definition").length,
+    1,
+  );
+});

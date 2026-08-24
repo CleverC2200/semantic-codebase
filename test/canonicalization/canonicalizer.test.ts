@@ -56,8 +56,28 @@ test("canonicalizer publishes deterministic definitions, relations and evidence"
   assert.ok(graph.definitions.every((definition) => definition.evidence_ids.length > 0));
   assert.ok(graph.relations.every((relation) => relation.evidence_ids.length > 0));
   assert.ok(graph.evidence.every((evidence) => evidence.source_digest.length === 64));
+  assert.equal(
+    graph.diagnostics.filter((diagnostic) => diagnostic.code === "unresolved_relation_candidate").length,
+    graph.unresolved_candidates.length,
+  );
   assert.equal(graph.graph_hash, canonicalizer.canonicalize({ repository, resolution }).graph_hash);
   assert.equal(canonicalHash(graph).length, 64);
+});
+
+test("invalid Definition ranges and partial Evidence references are isolated", () => {
+  const repository = fixture();
+  const slice = repository.slices[0]!;
+  const invalidRange = slice.definitions[0]!;
+  invalidRange.name_span = { start_byte: 0, end_byte: repository.manifest.files[0]!.byte_length + 1 };
+  const partialEvidence = slice.definitions[1]!;
+  partialEvidence.evidence_local_ids = [...partialEvidence.evidence_local_ids, "missing"];
+  const resolution = new DeterministicResolver().resolve(repository);
+  const graph = new SnapshotCanonicalizer().canonicalize({ repository, resolution });
+
+  assert.equal(graph.coverage.status, "failed");
+  assert.ok(graph.diagnostics.some((diagnostic) => diagnostic.code === "invalid_definition"));
+  assert.ok(graph.diagnostics.some((diagnostic) => diagnostic.code === "missing_definition_evidence"));
+  assert.ok(graph.definitions.every((definition) => definition.file_path !== "src/dep.ts"));
 });
 
 test("stale Evidence and missing Evidence block fact publication", () => {

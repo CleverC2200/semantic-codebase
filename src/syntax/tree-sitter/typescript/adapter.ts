@@ -167,12 +167,9 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
     input: SourceFileInput,
     offsetMap: Utf8OffsetMap,
   ): Diagnostic[] {
-    const captured = new Set(
-      definitions.flatMap((definition) => [definition.node.id, definition.nameNode.id]),
-    );
     return rootNode
       .descendantsOfType(["arrow_function", "function_expression", "class"])
-      .filter((node) => !isInsideCapturedDefinition(node, definitions) && !captured.has(node.id))
+      .filter((node) => !isStableCallableBinding(node, definitions))
       .map((node) => ({
         code: "unsupported_anonymous_definition",
         severity: "info" as const,
@@ -211,11 +208,9 @@ function isDefinitionKind(value: string): value is RawDefinition["kind"] {
   return ["module", "class", "interface", "function", "method"].includes(value);
 }
 
-function isInsideCapturedDefinition(node: Parser.SyntaxNode, definitions: RawDefinition[]): boolean {
-  return definitions.some(
-    (definition) =>
-      definition.node.startIndex <= node.startIndex &&
-      definition.node.endIndex >= node.endIndex &&
-      (definition.node.startIndex !== node.startIndex || definition.node.endIndex !== node.endIndex),
-  );
+function isStableCallableBinding(node: Parser.SyntaxNode, definitions: RawDefinition[]): boolean {
+  return definitions.some((definition) => {
+    const value = definition.node.childForFieldName("value");
+    return value?.startIndex === node.startIndex && value.endIndex === node.endIndex;
+  });
 }

@@ -61,7 +61,9 @@ export class SnapshotCanonicalizer implements Canonicalizer {
       left.local_id.localeCompare(right.local_id),
     );
     const allDiagnostics = uniqueDiagnostics([
-      ...input.repository.slices.flatMap((slice) => slice.diagnostics),
+      ...input.repository.slices.flatMap((slice) =>
+        slice.diagnostics.filter((diagnostic) => diagnostic.code !== "unresolved_relation_candidate"),
+      ),
       ...input.resolution.diagnostics,
       ...state.diagnostics,
     ]).sort(compareDiagnostics);
@@ -172,9 +174,26 @@ function canonicalizeEvidence(state: CanonicalizationState): CanonicalEvidence[]
 }
 
 function canonicalizeDefinitions(state: CanonicalizationState): CanonicalDefinition[] {
-  const located = state.input.repository.slices.flatMap((slice) =>
-    slice.definitions.map((draft) => ({ file_path: slice.file.relative_path, slice, draft })),
-  );
+  const located: LocatedDefinition[] = [];
+  for (const slice of state.input.repository.slices) {
+    const file = state.input.repository.manifest.files.find(
+      (candidate) => candidate.relative_path === slice.file.relative_path,
+    );
+    const manifest = state.manifestsByLanguage.get(slice.file.language);
+    for (const draft of slice.definitions) {
+      if (!file || !manifest || !validDefinitionDraft(draft, slice, file.byte_length, manifest)) {
+        state.diagnostics.push({
+          code: "invalid_definition",
+          severity: "error",
+          file_path: slice.file.relative_path,
+          span: draft.definition_span,
+          message: "Definition range, language, or Adapter capability is invalid",
+        });
+        continue;
+      }
+      located.push({ file_path: slice.file.relative_path, slice, draft });
+    }
+  }
   const groups = new Map<string, LocatedDefinition[]>();
   for (const item of located) {
     const definitionKey = definitionKeyFor(state, item);
@@ -210,8 +229,8 @@ function canonicalizeDefinitions(state: CanonicalizationState): CanonicalDefinit
     }
     const item = items[0];
     if (!item) continue;
-    const evidence_ids = mapEvidenceIds(state, item.file_path, item.draft.evidence_local_ids);
-    if (evidence_ids.length === 0) {
+    const evidence_ids = mapCompleteEvidenceIds(state, item.file_path, item.draft.evidence_local_ids);
+    if (!evidence_ids) {
       state.diagnostics.push(missingEvidenceDiagnostic(item.file_path, item.draft.qualified_name));
       continue;
     }
@@ -286,8 +305,8 @@ function canonicalizeRelations(state: CanonicalizationState): CanonicalRelation[
     }
     const source = mapEndpoint(state, resolved.source);
     const target = mapEndpoint(state, resolved.target);
-    const evidence_ids = mapEvidenceIds(state, resolved.source.file_path, resolved.evidence_local_ids);
-    if (!source || !target || evidence_ids.length === 0) {
+    const evidence_ids = mapCompleteEvidenceIds(state, resolved.source.file_path, resolved.evidence_local_ids);
+    if (!source || !target || !evidence_ids) {
       state.diagnostics.push({
         code: "invalid_resolved_relation",
         severity: "error",
@@ -334,8 +353,8 @@ function canonicalizeExactRelation(
     ? { kind: "source_file", file_path: slice.file.relative_path }
     : mapDefinitionEndpoint(state, slice.file.relative_path, exact.source_local_ref.local_id);
   const target = mapDefinitionEndpoint(state, slice.file.relative_path, exact.target_local_id);
-  const evidence_ids = mapEvidenceIds(state, slice.file.relative_path, exact.evidence_local_ids);
-  if (!source || !target || evidence_ids.length === 0) {
+  const evidence_ids = mapCompleteEvidenceIds(state, slice.file.relative_path, exact.evidence_local_ids);
+  if (!source || !target || !evidence_ids) {
     state.diagnostics.push({
       code: "invalid_exact_relation",
       severity: "error",
@@ -404,6 +423,8 @@ function validEvidenceDraft(
   return (
     evidence.file_path === slice.file.relative_path &&
     evidence.source_digest === slice.file.source_digest &&
+    Number.isInteger(evidence.span.start_byte) &&
+    Number.isInteger(evidence.span.end_byte) &&
     evidence.span.start_byte >= 0 &&
     evidence.span.end_byte >= evidence.span.start_byte &&
     evidence.span.end_byte <= byteLength &&
@@ -412,6 +433,29 @@ function validEvidenceDraft(
     evidence.grammar_digest === manifest.grammar.digest &&
     evidence.query_digest === manifest.query_digest &&
     evidence.config_digest === manifest.config_digest
+  );
+}
+
+function validDefinitionDraft(
+  definition: DefinitionDraft,
+  slice: SyntaxSlice,
+  byteLength: number,
+  manifest: SyntaxAdapterManifest,
+): boolean {
+  const spans = [definition.name_span, definition.definition_span];
+  return (
+    definition.language === slice.file.language &&
+    manifest.capabilities.definition_kinds.includes(definition.kind) &&
+    spans.every(
+      (span) =>
+        Number.isInteger(span.start_byte) &&
+        Number.isInteger(span.end_byte) &&
+        span.start_byte >= 0 &&
+        span.end_byte >= span.start_byte &&
+        span.end_byte <= byteLength,
+    ) &&
+    definition.definition_span.start_byte <= definition.name_span.start_byte &&
+    definition.definition_span.end_byte >= definition.name_span.end_byte
   );
 }
 
@@ -424,6 +468,17 @@ function mapEvidenceIds(
     const evidence = state.canonicalEvidenceByDraftRef.get(localRef(filePath, localId));
     return evidence ? [evidence.evidence_id] : [];
   }))].sort();
+}
+
+function mapCompleteEvidenceIds(
+  state: CanonicalizationState,
+  filePath: string,
+  localIds: string[],
+): string[] | null {
+  const uniqueLocalIds = [...new Set(localIds)];
+  if (uniqueLocalIds.length === 0) return null;
+  const evidenceIds = mapEvidenceIds(state, filePath, uniqueLocalIds);
+  return evidenceIds.length === uniqueLocalIds.length ? evidenceIds : null;
 }
 
 function mapEndpoint(
