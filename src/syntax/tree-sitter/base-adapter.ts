@@ -10,11 +10,13 @@ import type {
   EvidenceDraft,
   ExactRelationDraft,
   RelationCandidate,
+  RelationKind,
   SourceFileInput,
   SubjectLocalRef,
   SyntaxAdapter,
   SyntaxAdapterManifest,
   SyntaxSlice,
+  TargetHint,
 } from "../../contract/types.js";
 
 export interface RawDefinition {
@@ -41,7 +43,13 @@ export interface AdapterConstruction {
   manifest: Omit<SyntaxAdapterManifest, "query_digest" | "config_digest">;
   language: unknown;
   definitionsQuerySource: string;
+  relationsQuerySource?: string;
   config?: { max_source_bytes?: number };
+}
+
+export interface CandidateExtraction {
+  candidates: RelationCandidate[];
+  evidence: EvidenceDraft[];
 }
 
 const DEFAULT_MAX_SOURCE_BYTES = 2_000_000;
@@ -69,6 +77,7 @@ function sourceRefKey(reference: SubjectLocalRef): string {
 export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
   readonly manifest: SyntaxAdapterManifest;
   protected readonly definitionsQuery: Parser.Query;
+  protected readonly relationsQuery: Parser.Query | null;
   protected readonly language: unknown;
   private readonly maxSourceBytes: number;
 
@@ -77,7 +86,10 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
     this.maxSourceBytes = construction.config?.max_source_bytes ?? DEFAULT_MAX_SOURCE_BYTES;
     this.manifest = {
       ...construction.manifest,
-      query_digest: sha256Text(construction.definitionsQuerySource),
+      query_digest: canonicalHash({
+        definitions: construction.definitionsQuerySource,
+        relations: construction.relationsQuerySource ?? null,
+      }),
       config_digest: canonicalHash({ max_source_bytes: this.maxSourceBytes }),
     };
     try {
@@ -85,6 +97,9 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
         construction.language,
         construction.definitionsQuerySource,
       );
+      this.relationsQuery = construction.relationsQuerySource
+        ? new Parser.Query(construction.language, construction.relationsQuerySource)
+        : null;
     } catch (error) {
       throw new AdapterUnavailableError(
         this.manifest.id,
@@ -127,7 +142,7 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
     const rawDefinitions = this.collectDefinitions(tree.rootNode);
     const { definitions, evidence } = this.normalizeDefinitions(input, rawDefinitions, offsetMap);
     const exactRelations = createContainsRelations(input, definitions);
-    const relationCandidates = this.collectRelationCandidates({
+    const candidateExtraction = this.collectRelationCandidates({
       input,
       sourceText,
       rootNode: tree.rootNode,
@@ -135,10 +150,8 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
       rawDefinitions,
       offsetMap,
     });
-    const candidateEvidence = relationCandidates.flatMap((candidate) =>
-      this.candidateEvidence(candidate, input),
-    );
-    const allEvidence = uniqueByLocalId([...evidence, ...candidateEvidence]);
+    const relationCandidates = uniqueByLocalId(candidateExtraction.candidates);
+    const allEvidence = uniqueByLocalId([...evidence, ...candidateExtraction.evidence]);
     const candidateDiagnostics = relationCandidates.map((candidate) => {
       const candidateEvidenceItem = allEvidence.find((item) =>
         candidate.evidence_local_ids.includes(item.local_id),
@@ -202,15 +215,8 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
     return [];
   }
 
-  protected collectRelationCandidates(_context: DefinitionContext): RelationCandidate[] {
-    return [];
-  }
-
-  protected candidateEvidence(
-    _candidate: RelationCandidate,
-    _input: SourceFileInput,
-  ): EvidenceDraft[] {
-    return [];
+  protected collectRelationCandidates(_context: DefinitionContext): CandidateExtraction {
+    return { candidates: [], evidence: [] };
   }
 
   protected makeEvidence(input: SourceFileInput, span: ByteSpan, discriminator: unknown): EvidenceDraft {
@@ -226,6 +232,39 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
       grammar_digest: this.manifest.grammar.digest,
       query_digest: this.manifest.query_digest,
       config_digest: this.manifest.config_digest,
+    };
+  }
+
+  protected makeCandidate(
+    context: DefinitionContext,
+    kind: Exclude<RelationKind, "CONTAINS">,
+    targetHint: TargetHint,
+    evidenceNode: Parser.SyntaxNode,
+  ): { candidate: RelationCandidate; evidence: EvidenceDraft } {
+    const span = context.offsetMap.span(evidenceNode);
+    const source_local_ref = nearestDefinitionReference(context.definitions, span);
+    const local_id = canonicalHash({
+      type: "relation_candidate",
+      kind,
+      source_local_ref,
+      target_hint: targetHint,
+      span,
+      query_digest: this.manifest.query_digest,
+      config_digest: this.manifest.config_digest,
+    });
+    const evidence = this.makeEvidence(context.input, span, {
+      type: "relation_candidate",
+      local_id,
+    });
+    return {
+      candidate: {
+        local_id,
+        kind,
+        source_local_ref,
+        target_hint: targetHint,
+        evidence_local_ids: [evidence.local_id],
+      },
+      evidence,
     };
   }
 
