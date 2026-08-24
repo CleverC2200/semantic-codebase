@@ -11,6 +11,7 @@ export interface RepositoryManifestFile {
   relative_path: string;
   language: Language;
   source_digest: string;
+  byte_length: number;
 }
 
 export interface RepositoryManifest {

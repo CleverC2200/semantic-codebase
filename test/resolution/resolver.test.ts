@@ -32,7 +32,12 @@ function view(files: Array<[string, string]>): FrozenRepositoryView {
     manifest: {
       repository_id: "repo",
       snapshot_id: "snapshot",
-      files: slices.map((item) => ({ ...item.file })),
+      files: slices.map((item) => ({
+        ...item.file,
+        byte_length: files.find(([filePath]) => filePath === item.file.relative_path)?.[1]
+          ? new TextEncoder().encode(files.find(([filePath]) => filePath === item.file.relative_path)?.[1]).byteLength
+          : 0,
+      })),
     },
     slices,
     adapter_manifests: [adapter.manifest],
@@ -119,7 +124,12 @@ test("Python relative imports and aliases resolve against the frozen manifest", 
     manifest: {
       repository_id: "repo",
       snapshot_id: "python-snapshot",
-      files: slices.map((item) => ({ ...item.file })),
+      files: slices.map((item) => ({
+        ...item.file,
+        byte_length: new TextEncoder().encode(
+          sources.find(([filePath]) => filePath === item.file.relative_path)?.[1] ?? "",
+        ).byteLength,
+      })),
     },
     slices,
     adapter_manifests: [python.manifest],
