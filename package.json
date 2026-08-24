@@ -1,0 +1,28 @@
+{
+  "name": "semantic-codebase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-query-assets.mjs",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "benchmark:syntax": "npm run build && node scripts/benchmark-syntax.mjs"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "tree-sitter": "0.21.1",
+    "tree-sitter-python": "0.21.0",
+    "tree-sitter-typescript": "0.23.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  }
+}
