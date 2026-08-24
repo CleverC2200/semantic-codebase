@@ -6,6 +6,19 @@ import type {
   SyntaxSlice,
 } from "./types.js";
 
+export class AdapterUnavailableError extends Error {
+  readonly code = "adapter_unavailable";
+
+  constructor(
+    readonly adapterId: string,
+    readonly causeCode: "query_incompatible" | "runtime_unavailable",
+    message: string,
+  ) {
+    super(message);
+    this.name = "AdapterUnavailableError";
+  }
+}
+
 export function validateSourceInput(
   input: SourceFileInput,
   manifest: SyntaxAdapterManifest,
