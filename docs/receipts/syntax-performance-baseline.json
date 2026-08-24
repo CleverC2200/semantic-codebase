@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-24",
+  "implementation_revision": "26f2062",
+  "command": "npm run benchmark:syntax",
+  "environment": {
+    "os": "macOS 26.5.2 (25F84)",
+    "architecture": "arm64",
+    "cpu": "Apple M4",
+    "memory_bytes": 17179869184,
+    "node": "v24.14.1",
+    "npm": "11.11.0",
+    "tree_sitter": "0.21.1",
+    "tree_sitter_typescript": "0.23.2",
+    "tree_sitter_python": "0.21.0"
+  },
+  "corpus": {
+    "roots": [
+      "src/**/*.ts",
+      "benchmark/corpus/python/**/*.py"
+    ],
+    "manifest_digest": "f3a8a98f49b4ddf3ff054feb81b5a3ba98add3c1ee5ab40258aceee35b61796b",
+    "files": 19,
+    "bytes": 87095
+  },
+  "iterations": 9,
+  "process_model": "one isolated worker process per measured build",
+  "metrics_ms": {
+    "parse_only": { "median": 4.975, "p95": 5.524 },
+    "query_only": { "median": 4.112, "p95": 4.455 },
+    "postprocess_normalize_estimate": { "median": 41.012, "p95": 43.108 },
+    "syntax_extract": { "median": 49.856, "p95": 52.525 },
+    "resolver": { "median": 16.236, "p95": 17.522 },
+    "canonicalizer": { "median": 14.846, "p95": 15.932 },
+    "full_pipeline": { "median": 79.873, "p95": 89.098 },
+    "single_file_incremental": { "median": 42.799, "p95": 49.934 }
+  },
+  "max_rss_kib": 144800,
+  "final_rss_kib": 143488,
+  "facts": {
+    "definitions": 164,
+    "relations": 314,
+    "unresolved_candidates": 519,
+    "evidence": 858,
+    "graph_hash": "043086cca87944de632dd03685ef6cfd1ed0c0f670b3a514f45c4e3ac59b524e",
+    "coverage_status": "ready"
+  },
+  "budgets": {
+    "full_pipeline_p95_ms": 150,
+    "single_file_incremental_p95_ms": 75,
+    "isolated_worker_max_rss_kib": 196608,
+    "required_coverage_status": "ready"
+  },
+  "decision": "defer_s4_optimization",
+  "notes": [
+    "postprocess_normalize_estimate is syntax_extract minus isolated parse and Query execution and is clamped at zero.",
+    "The benchmark reads the public corpus only, does not write target repositories, install their dependencies, execute their code, or use network analysis.",
+    "Long-lived daemon memory soak is outside this gate and must be measured before adding a daemon or watcher."
+  ]
+}
