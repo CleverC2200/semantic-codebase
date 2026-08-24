@@ -14,9 +14,9 @@
 
 ## 可复核输入
 
-- 实现基线：`26f2062`。
+- 实现基线：`07267e5`。
 - Corpus：当前公开仓库的 `src/**/*.ts` 与 `benchmark/corpus/python/**/*.py`。
-- Corpus Manifest Digest：`f3a8a98f49b4ddf3ff054feb81b5a3ba98add3c1ee5ab40258aceee35b61796b`。
+- Corpus Manifest Digest：`0a250869650f92d854e840164b23a9b6ac02ac9e82e2f69ee2a8bb89e10dc6ff`。
 - 命令：`npm run benchmark:syntax`。
 - 原始结果：[syntax-performance-baseline.json](../receipts/syntax-performance-baseline.json)。
 
@@ -26,18 +26,18 @@
 
 | Gate | 预算 | 实测 p95 / peak | 结果 |
 | --- | ---: | ---: | --- |
-| 全量 Pipeline | ≤ 150 ms | 89.098 ms | 通过 |
-| 单文件增量 | ≤ 75 ms | 49.934 ms | 通过 |
-| 隔离 worker 最大 RSS | ≤ 192 MiB | 141.4 MiB | 通过 |
+| 全量 Pipeline | ≤ 150 ms | 78.473 ms | 通过 |
+| 单文件增量 | ≤ 75 ms | 46.928 ms | 通过 |
+| 隔离 worker 最大 RSS | ≤ 192 MiB | 141.6 MiB | 通过 |
 | Canonical Coverage | `ready` | `ready` | 通过 |
 
-阶段 p95：parse 5.524 ms、Query 4.455 ms、后处理与规范化估算 43.108 ms、Resolver 17.522 ms、Canonicalizer 15.932 ms。
+阶段 p95：parse 5.127 ms、Query 4.132 ms、后处理与规范化估算 41.444 ms、Resolver 17.022 ms、Canonicalizer 13.671 ms。
 
-正确性同时保存：164 个 Definition、314 个权威 Relation、519 个 unresolved Candidate、858 份 Evidence；规范图 hash 为 `043086cca87944de632dd03685ef6cfd1ed0c0f670b3a514f45c4e3ac59b524e`。
+正确性同时保存：167 个 Definition、319 个权威 Relation、533 个 unresolved Candidate、877 份 Evidence；规范图 hash 为 `97911e10a17341fb77128f6fc4cc3138094afedb6ebb51cb3ee11301f7a17ccf`。
 
 ## 边界与重新开启条件
 
-当前 corpus 只有 19 个文件、87,095 bytes，结果只能作为 V0.1 本地链路基线，不能外推为大型仓库容量承诺。
+当前 corpus 只有 19 个文件、89,417 bytes，结果只能作为 V0.1 本地链路基线，不能外推为大型仓库容量承诺。
 
 出现以下任一条件时，重新进入 S4 Gate 并单独拆票：
 

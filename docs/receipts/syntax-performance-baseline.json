@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "recorded_at": "2026-08-24",
-  "implementation_revision": "26f2062",
+  "implementation_revision": "07267e5",
   "command": "npm run benchmark:syntax",
   "environment": {
     "os": "macOS 26.5.2 (25F84)",
@@ -19,30 +19,30 @@
       "src/**/*.ts",
       "benchmark/corpus/python/**/*.py"
     ],
-    "manifest_digest": "f3a8a98f49b4ddf3ff054feb81b5a3ba98add3c1ee5ab40258aceee35b61796b",
+    "manifest_digest": "0a250869650f92d854e840164b23a9b6ac02ac9e82e2f69ee2a8bb89e10dc6ff",
     "files": 19,
-    "bytes": 87095
+    "bytes": 89417
   },
   "iterations": 9,
   "process_model": "one isolated worker process per measured build",
   "metrics_ms": {
-    "parse_only": { "median": 4.975, "p95": 5.524 },
-    "query_only": { "median": 4.112, "p95": 4.455 },
-    "postprocess_normalize_estimate": { "median": 41.012, "p95": 43.108 },
-    "syntax_extract": { "median": 49.856, "p95": 52.525 },
-    "resolver": { "median": 16.236, "p95": 17.522 },
-    "canonicalizer": { "median": 14.846, "p95": 15.932 },
-    "full_pipeline": { "median": 79.873, "p95": 89.098 },
-    "single_file_incremental": { "median": 42.799, "p95": 49.934 }
+    "parse_only": { "median": 4.975, "p95": 5.127 },
+    "query_only": { "median": 4.104, "p95": 4.132 },
+    "postprocess_normalize_estimate": { "median": 40.041, "p95": 41.444 },
+    "syntax_extract": { "median": 49.081, "p95": 50.568 },
+    "resolver": { "median": 16.225, "p95": 17.022 },
+    "canonicalizer": { "median": 12.85, "p95": 13.671 },
+    "full_pipeline": { "median": 77.912, "p95": 78.473 },
+    "single_file_incremental": { "median": 42.291, "p95": 46.928 }
   },
-  "max_rss_kib": 144800,
-  "final_rss_kib": 143488,
+  "max_rss_kib": 144960,
+  "final_rss_kib": 143824,
   "facts": {
-    "definitions": 164,
-    "relations": 314,
-    "unresolved_candidates": 519,
-    "evidence": 858,
-    "graph_hash": "043086cca87944de632dd03685ef6cfd1ed0c0f670b3a514f45c4e3ac59b524e",
+    "definitions": 167,
+    "relations": 319,
+    "unresolved_candidates": 533,
+    "evidence": 877,
+    "graph_hash": "97911e10a17341fb77128f6fc4cc3138094afedb6ebb51cb3ee11301f7a17ccf",
     "coverage_status": "ready"
   },
   "budgets": {
