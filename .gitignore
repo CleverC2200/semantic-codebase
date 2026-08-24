@@ -1,0 +1,36 @@
+# macOS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies and generated output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local indexes and databases
+.scb/
+.codegraph/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db-shm
+*.db-wal
+
+# Environment and logs
+.env
+.env.local
+.env.*.local
+*.log
+
+# Local migration/recovery material
+.workspace/
+
+# Local agent tool installations; product instructions may be added separately.
+/.agents/skills/
+
+# Local-only reference projects; never publish them with this repository.
+/references/

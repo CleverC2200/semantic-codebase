@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Semantic Codebase V0.1 CLI / MCP 契约原型</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#657086; --line:#dce2ec; --paper:#fff; --wash:#f5f7fb; --accent:#3157d5; --good:#176b4d; --warn:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--wash); color:var(--ink); font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"PingFang SC",sans-serif; }
+    main { width:min(1180px,calc(100% - 32px)); margin:32px auto 64px; }
+    h1 { margin:0 0 8px; font-size:28px; }
+    h2 { margin:0 0 14px; font-size:18px; }
+    p { margin:0; }
+    .intro,.panel { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:20px; }
+    .intro { margin-bottom:16px; }
+    .question { color:var(--muted); max-width:900px; }
+    .variants,.actions,.tabs { display:flex; flex-wrap:wrap; gap:8px; }
+    button { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:9px; padding:9px 12px; cursor:pointer; font:inherit; }
+    button:hover { border-color:#9aa8c4; }
+    button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    button.primary { background:#eef2ff; color:#233f9f; border-color:#c9d3ff; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+    .wide { grid-column:1/-1; }
+    .label { color:var(--muted); font-size:12px; letter-spacing:.05em; text-transform:uppercase; margin-bottom:6px; }
+    .value { font-weight:650; }
+    .state { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat { border:1px solid var(--line); border-radius:10px; padding:12px; background:#fbfcff; }
+    .good { color:var(--good); }
+    .warn { color:var(--warn); }
+    pre { margin:0; padding:14px; min-height:190px; overflow:auto; border-radius:10px; background:#111827; color:#e6edf7; font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; }
+    .help { min-height:250px; }
+    .scenario { margin-top:12px; padding:14px; border:1px dashed #b8c1d2; border-radius:10px; }
+    .scenario p { color:var(--muted); margin-bottom:10px; }
+    .note { margin-top:12px; padding:10px 12px; border-left:3px solid var(--accent); background:#f1f4ff; }
+    @media (max-width:800px) { .grid { grid-template-columns:1fr; } .wide { grid-column:auto; } .state { grid-template-columns:1fr 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <section class="intro">
+    <h1>CLI / MCP 使用契约原型</h1>
+    <p class="question">要回答的问题：面对“定位 Definition、查 callers、找路径、评估结构影响范围”时，单一 Explore、精确多查询、还是混合 Interface，能让 AI Agent 用更少认知成本获得可解释且可重复的结果？这是可丢弃原型，不连接真实索引。</p>
+  </section>
+
+  <section class="panel">
+    <div class="label">候选 Interface</div>
+    <div class="variants" id="variants"></div>
+    <div class="note" id="verdict"></div>
+  </section>
+
+  <section class="grid">
+    <section class="panel wide">
+      <h2>当前状态</h2>
+      <div class="state" id="state"></div>
+    </section>
+
+    <section class="panel">
+      <h2>自由试用</h2>
+      <div class="actions" id="actions"></div>
+      <div class="note">所有场景固定使用 <code>repository=demo</code>、<code>snapshot=current_ready</code>、<code>require_fresh=true</code>，便于比较 Interface 本身。</div>
+    </section>
+
+    <section class="panel">
+      <h2>引导场景</h2>
+      <div class="tabs" id="tabs"></div>
+      <div class="scenario" id="scenario"></div>
+    </section>
+
+    <section class="panel">
+      <h2>CLI 帮助</h2>
+      <pre class="help" id="cliHelp"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>MCP Tool 形状</h2>
+      <pre class="help" id="mcpHelp"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>本次请求</h2>
+      <pre id="request">请选择一个动作。</pre>
+    </section>
+
+    <section class="panel">
+      <h2>规范化 QueryResult</h2>
+      <pre id="response">请选择一个动作。</pre>
+    </section>
+  </section>
+</main>
+
+<script>
+const scope = { repository_id:"demo", snapshot:"current_ready", require_fresh:true };
+const budget = { max_depth:1, max_nodes:500, max_results:50, timeout_ms:2000, source_bytes:16384 };
+
+const variants = {
+  explore: {
+    name:"A · 结构化单入口",
+    verdict:"只有一个 Tool，但 target 是严格判别联合，不接收自然语言意图。工具数量最少，Schema 本身仍包含五种子 Interface。",
+    cli:`scb explore status --scope @scope.json\nscb explore search <text> --scope @scope.json [--kind <kind>]\nscb explore definition <key> --scope @scope.json\n            [--direction <in|out|both>] [--relation <kind>]\nscb explore path --from <key> --to <key> --relation <kind>\nscb explore evidence <id> --source-bytes <n>\n\n不提供 impact 或自由文本 question。`,
+    mcp:`tool: semantic_explore\ninput: {\n  schema_version: "0.1",\n  scope,\n  target:\n    | { kind: "status" }\n    | { kind: "search", query, filters? }\n    | { kind: "definition", definition_key, expand? }\n    | { kind: "path", from, to, relation_kinds }\n    | { kind: "evidence", evidence_ids },\n  budget\n}\n\n服务端统一固定 Snapshot、共享预算并汇总结果。`
+  },
+  precise: {
+    name:"B · 精确多查询",
+    verdict:"已选为 V0.1 权威与 Benchmark Interface：操作、Scope、Budget 都显式；CLI 与 MCP 共用契约，不提供 callers、impact 或 recipe 捷径。",
+    cli:`scb status --repo <id|.> --snapshot <id|current_ready> --require-fresh <bool> --json\nscb definitions find --text <text> [--kind <kind>] <scope> --json\nscb definition get --key <definition-key> <scope> --json\nscb evidence get --id <evidence-id> --source-bytes <n> <scope> --json\nscb graph traverse --seed <key> --direction <in|out|both>\n                   --relations <kinds> --depth <n> <scope> --json\nscb graph paths --from <key> --to <key>\n                --relations <kinds> <scope> --json\n\n<scope> 必须显式提供 repo、snapshot、require-fresh。`,
+    mcp:`六个独立 Tool，共用 QueryResult：\n- code_status(scope)\n- code_find_definitions(scope, filter, budget)\n- code_get_definition(scope, definition_key)\n- code_get_evidence(scope, evidence_ids, source_budget)\n- code_traverse(scope, seeds, direction, relation_kinds, budget)\n- code_find_paths(scope, from, to, relation_kinds, budget)\n\n空结果与 truncated 是成功；真正失败使用稳定错误码。`
+  },
+  hybrid: {
+    name:"C · 双入口混合",
+    verdict:"一个 Explore Tool 执行版本化固定 recipe，一个 Query Tool 保留六种精确操作。常见任务更省调用，但重叠入口增加选择与维护成本。",
+    cli:`scb explore <text> --recipe <overview@1|impact@1>\n            [--seed <definition-key>] --budget agent-default@1\n\nscb query <status|find-definitions|get-definition|get-evidence|traverse|find-paths>\n          --request @request.json\n\n规则：\n- overview@1 = find + get + 一跳 traverse\n- impact@1 必须提供唯一 Definition Key\n- 响应回显 recipe、解析后预算和执行计划\n- 不调用模型解释 <text>`,
+    mcp:`tools:\n- semantic_codebase_explore({\n    scope, text, recipe: "overview@1" | "impact@1",\n    seed?, budget: "agent-default@1" | QueryBudget\n  })\n- semantic_codebase_query({\n    scope, operation: Status | Find | Get | Evidence | Traverse | Paths\n  })\n\n两个 Tool 共用 QueryResult；recipe 只是精确操作的确定性编排。`
+  }
+};
+
+const scenarios = {
+  locate: { title:"定位 Definition", desc:"从名称找到唯一 Definition，再读取它的源码 Evidence。", steps:["find","show"] },
+  callers: { title:"查询 callers", desc:"先解析 Definition Key，再沿 CALLS 入方向遍历一跳。", steps:["find","callers"] },
+  path: { title:"查找路径", desc:"在两个已知 Definition 之间寻找最短结构路径，并观察预算。", steps:["path"] },
+  impact: { title:"影响范围", desc:"显式选择 CALLS 与 REFERENCES、向入方向遍历两层；不把结果宣称为完整运行时影响。", steps:["impact"] },
+  truncated: { title:"预算截断", desc:"模拟节点预算耗尽；结果必须保留 partial data，并明确 completeness.truncated。", steps:["truncate"] }
+};
+
+const state = { variant:"precise", scenario:"callers", lastAction:null, calls:0, hiddenDefaults:0, benchmark:"—", truncated:false };
+const actions = [
+  ["find","定位 parseConfig"], ["show","读取 Definition"], ["callers","查询 callers"],
+  ["path","查 parseConfig → loadConfig"], ["impact","评估结构影响"], ["truncate","模拟预算截断"]
+];
+
+function operationFor(action) {
+  if (state.variant === "explore") {
+    const target = action === "find" ? {kind:"search",query:"parseConfig",definition_kinds:["function","method"]}
+      : action === "show" ? {kind:"definition",definition_key:"def:parseConfig"}
+      : action === "callers" ? {kind:"definition",definition_key:"def:parseConfig",expand:{direction:"in",relation_kinds:["CALLS"]}}
+      : action === "path" ? {kind:"path",from:"def:parseConfig",to:"def:loadConfig",relation_kinds:["CALLS","REFERENCES"]}
+      : {kind:"definition",definition_key:"def:parseConfig",expand:{direction:"in",relation_kinds:["CALLS","REFERENCES"]}};
+    return { tool:"semantic_explore", input:{ schema_version:"0.1",scope,target,budget:{...budget,...(["impact","truncate"].includes(action)?{max_depth:2}:{}) ,...(action === "truncate"?{max_nodes:2}:{})} } };
+  }
+  if (state.variant === "hybrid" && ["impact","truncate"].includes(action)) {
+    return {tool:"semantic_codebase_explore",input:{scope,text:"parseConfig",recipe:"impact@1",seed:{definition_key:"def:parseConfig"},budget:{...budget,max_depth:2,...(action === "truncate"?{max_nodes:2}:{})}}};
+  }
+  const tool = {find:"code_find",show:"code_show",callers:"code_traverse",path:"code_paths",impact:"code_traverse",truncate:"code_traverse"}[action];
+  const input = action === "find" ? {scope,text:"parseConfig",kinds:["function","method"],budget}
+    : action === "show" ? {scope,definition_key:"def:parseConfig",include_evidence:true,source_budget:{source_bytes:4096}}
+    : action === "callers" ? {scope,seeds:["def:parseConfig"],direction:"in",relation_kinds:["CALLS"],budget}
+    : action === "path" ? {scope,from:"def:parseConfig",to:"def:loadConfig",relation_kinds:["CALLS","REFERENCES"],budget:{...budget,max_depth:3,max_paths:20}}
+    : {scope,seeds:["def:parseConfig"],direction:"in",relation_kinds:["CALLS","REFERENCES"],budget:{...budget,max_depth:2,...(action === "truncate"?{max_nodes:2}:{})}};
+  return {tool,input};
+}
+
+function resultFor(action) {
+  const truncated = action === "truncate";
+  const data = action === "find" ? {definitions:[{definition_key:"def:parseConfig",kind:"function",qualified_name:"src/config::parseConfig",evidence_refs:["ev:41"]}]}
+    : action === "show" ? {definition:{definition_key:"def:parseConfig",kind:"function",qualified_name:"src/config::parseConfig",source_excerpt:"export function parseConfig(...)"}}
+    : action === "path" ? {paths:[{definitions:["def:parseConfig","def:normalizeConfig","def:loadConfig"],relations:["REFERENCES","CALLS"]}]}
+    : {nodes:["def:parseConfig","def:loadUserConfig",...(truncated?[]:["def:bootstrap"])],relations:[{kind:"CALLS",from:"def:loadUserConfig",to:"def:parseConfig"}]};
+  return {
+    snapshot:{snapshot_id:"snap:7f3a",revision:"c6aaa203",freshness:"fresh"},
+    data,
+    completeness:{complete:!truncated,truncated,reason:truncated?"max_nodes":null,budget_used:{nodes:truncated?2:3,elapsed_ms:12}},
+    coverage:{indexed_files:179,skipped_files:0,unresolved_candidates:7,failed_adapters:[]},
+    evidence_refs:["ev:41","ev:52"]
+  };
+}
+
+function dispatch(action) {
+  state.lastAction = action;
+  state.calls += action === "callers" && state.variant !== "explore" ? 1 : 1;
+  state.hiddenDefaults = state.variant === "hybrid" && ["impact","truncate"].includes(action) ? 2 : 0;
+  state.benchmark = state.variant === "hybrid" && ["impact","truncate"].includes(action) ? "中：需冻结 recipe" : "强：操作与参数显式";
+  state.truncated = action === "truncate";
+  document.querySelector("#request").textContent = JSON.stringify(operationFor(action),null,2);
+  document.querySelector("#response").textContent = JSON.stringify(resultFor(action),null,2);
+  renderState();
+}
+
+function renderState() {
+  const current = variants[state.variant];
+  document.querySelector("#state").innerHTML = [
+    ["Interface",current.name], ["累计调用",String(state.calls)], ["隐式默认值",String(state.hiddenDefaults)],
+    ["Benchmark",state.benchmark], ["最近动作",state.lastAction || "尚未执行"],
+    ["Snapshot","snap:7f3a / fresh"], ["Coverage","179 indexed / 7 unresolved"],
+    ["Completeness",state.truncated ? "truncated: max_nodes" : "complete"]
+  ].map(([k,v])=>`<div class="stat"><div class="label">${k}</div><div class="value ${k==="Completeness"&&state.truncated?"warn":""}">${v}</div></div>`).join("");
+}
+
+function renderVariant() {
+  const current = variants[state.variant];
+  document.querySelector("#verdict").textContent = current.verdict;
+  document.querySelector("#cliHelp").textContent = current.cli;
+  document.querySelector("#mcpHelp").textContent = current.mcp;
+  document.querySelectorAll("[data-variant]").forEach(b=>b.classList.toggle("active",b.dataset.variant===state.variant));
+  state.lastAction=null; state.calls=0; state.hiddenDefaults=0; state.benchmark="—"; state.truncated=false;
+  document.querySelector("#request").textContent="请选择一个动作。";
+  document.querySelector("#response").textContent="请选择一个动作。";
+  renderState();
+}
+
+function renderScenario() {
+  const s=scenarios[state.scenario];
+  document.querySelectorAll("[data-scenario]").forEach(b=>b.classList.toggle("active",b.dataset.scenario===state.scenario));
+  document.querySelector("#scenario").innerHTML=`<strong>${s.title}</strong><p>${s.desc}</p><div class="actions">${s.steps.map((a,i)=>`<button class="primary" data-step="${a}">${i+1}. ${actions.find(x=>x[0]===a)[1]}</button>`).join("")}</div>`;
+  document.querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>dispatch(b.dataset.step));
+}
+
+document.querySelector("#variants").innerHTML=Object.entries(variants).map(([k,v])=>`<button data-variant="${k}">${v.name}</button>`).join("");
+document.querySelectorAll("[data-variant]").forEach(b=>b.onclick=()=>{state.variant=b.dataset.variant;renderVariant();});
+document.querySelector("#actions").innerHTML=actions.map(([k,v])=>`<button data-action="${k}">${v}</button>`).join("");
+document.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>dispatch(b.dataset.action));
+document.querySelector("#tabs").innerHTML=Object.entries(scenarios).map(([k,v])=>`<button data-scenario="${k}">${v.title}</button>`).join("");
+document.querySelectorAll("[data-scenario]").forEach(b=>b.onclick=()=>{state.scenario=b.dataset.scenario;renderScenario();});
+renderVariant(); renderScenario();
+</script>
+</body>
+</html>

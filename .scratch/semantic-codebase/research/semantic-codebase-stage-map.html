@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Semantic Codebase · P0–P7 开源能力与实施地图</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    :root{
+      --paper:#f5f5f5;--paper-2:#ececec;--ink:#2d3142;--muted:#4f5d75;--soft:#7a8399;
+      --rule:rgba(45,49,66,.12);--rule-strong:rgba(45,49,66,.24);--accent:#eb6c36;
+      --accent-tint:rgba(235,108,54,.08);--link:#2e5aa8;--white:#fff;
+      --sage:#7c8f6f;--blue:#5e7a9b;--mustard:#b8915a;--rust:#9c6b50;
+      --sans:'Geist',system-ui,-apple-system,sans-serif;
+      --serif:'Instrument Serif','Times New Roman',serif;
+      --mono:'Geist Mono',ui-monospace,Menlo,monospace;
+    }
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.6}
+    a{color:var(--link);text-decoration-thickness:1px;text-underline-offset:3px}
+    .page{max-width:1280px;margin:0 auto;padding:48px 32px 72px}
+    .eyebrow,.section-kicker,.tag,.metric-label,.phase-code,.table-note,.footer{font-family:var(--mono)}
+    .eyebrow,.section-kicker{margin:0 0 8px;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase}
+    h1,h2,h3,p{margin-top:0}
+    h1{max-width:900px;margin-bottom:16px;font:400 clamp(36px,5vw,64px)/1.04 var(--serif);letter-spacing:-.025em}
+    .lede{max-width:780px;margin-bottom:28px;color:var(--muted);font-size:17px}
+    .header-meta{display:flex;flex-wrap:wrap;gap:8px 20px;padding-top:16px;border-top:1px solid var(--rule);color:var(--soft);font:12px var(--mono)}
+    .metrics{display:grid;grid-template-columns:1.05fr .95fr 1.15fr .85fr;gap:16px;margin:40px 0 52px}
+    .metric{min-height:132px;padding:20px;background:var(--white);border:1px solid var(--rule);border-radius:6px}
+    .metric.accent{background:var(--accent-tint);border-color:rgba(235,108,54,.44)}
+    .metric-value{display:block;margin:8px 0 4px;font:400 36px/1 var(--serif)}
+    .metric-label{color:var(--muted);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+    .metric p{margin:8px 0 0;color:var(--muted);font-size:13px}
+    nav{position:sticky;top:0;z-index:10;display:flex;gap:8px;overflow:auto;margin:0 -12px 52px;padding:12px;background:rgba(245,245,245,.94);border-block:1px solid var(--rule);backdrop-filter:blur(10px)}
+    nav a{flex:0 0 auto;padding:7px 10px;border:1px solid var(--rule);border-radius:4px;background:var(--paper);color:var(--muted);font:11px var(--mono);text-decoration:none}
+    nav a:hover{border-color:var(--accent);color:var(--accent)}
+    section{scroll-margin-top:84px;margin-top:64px}
+    .section-head{display:grid;grid-template-columns:1fr minmax(280px,520px);gap:40px;align-items:end;margin-bottom:24px}
+    h2{margin-bottom:0;font:400 clamp(28px,3vw,40px)/1.1 var(--serif);letter-spacing:-.015em}
+    .section-intro{margin:0;color:var(--muted);font-size:14px}
+    .diagram-block{margin-bottom:32px;padding:24px;background:var(--paper-2);border:1px solid var(--rule);border-radius:8px;overflow-x:auto}
+    .diagram-block h3{margin-bottom:4px;font-size:15px}
+    .diagram-caption{margin-bottom:20px;color:var(--muted);font-size:13px}
+    svg{display:block;width:100%;min-width:880px}
+    svg text{font-family:var(--sans)}
+    .svg-mono{font-family:var(--mono)}
+    .slot-label{fill:var(--muted);font:500 10px var(--mono);letter-spacing:.12em}
+    .stage-label{fill:var(--muted);font:500 10px var(--mono);letter-spacing:.08em}
+    .stage-label.focal{fill:var(--accent)}
+    .stage-num{fill:var(--ink);font:600 11px var(--mono)}
+    .stage-num.focal{fill:var(--accent)}
+    .cell-title{fill:var(--ink);font:600 13px var(--sans)}
+    .cell-sub{fill:var(--muted);font:10px var(--sans)}
+    .cell-tech{fill:var(--soft);font:9px var(--mono)}
+    .flow{stroke:var(--muted);stroke-width:1.2;fill:none}
+    .flow.focal{stroke:var(--accent)}
+    .node{fill:var(--white);stroke:var(--rule-strong);stroke-width:1}
+    .node.input{fill:rgba(79,93,117,.07);stroke:rgba(79,93,117,.32)}
+    .node.output{fill:rgba(45,49,66,.04);stroke:rgba(79,93,117,.44)}
+    .node.focal{fill:var(--accent-tint);stroke:var(--accent);stroke-width:1.2}
+    .stage-chip{fill:rgba(45,49,66,.12)}
+    .stage-chip.focal{fill:rgba(235,108,54,.2)}
+    .legend{fill:var(--muted);font:10px var(--sans)}
+    .legend-key{fill:var(--muted);font:500 9px var(--mono);letter-spacing:.12em}
+    .route-note{display:grid;grid-template-columns:1.1fr 1fr .9fr;gap:16px;margin-top:20px}
+    .note-card{padding:18px;background:var(--white);border:1px solid var(--rule);border-radius:6px}
+    .note-card h3{display:flex;gap:9px;align-items:center;margin-bottom:10px;font-size:14px}
+    .dot{width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:var(--muted)}
+    .dot.accent{background:var(--accent)}.dot.ink{background:var(--ink)}.dot.link{background:var(--link)}
+    .note-card p{margin:0;color:var(--muted);font-size:13px}
+    .phase-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+    .phase{padding:24px;background:var(--white);border:1px solid var(--rule);border-radius:6px}
+    .phase.current{border-color:rgba(235,108,54,.52)}
+    .phase-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--rule)}
+    .phase-code{display:inline-block;margin-bottom:5px;color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.12em}
+    .phase h3{margin:0;font-size:18px}
+    .status{flex:0 0 auto;padding:4px 7px;border:1px solid var(--rule-strong);border-radius:2px;color:var(--muted);font:10px var(--mono)}
+    .status.live{border-color:rgba(124,143,111,.6);color:#566843;background:rgba(124,143,111,.08)}
+    .phase-question{margin-bottom:16px;color:var(--muted);font-size:14px}
+    .project-list{list-style:none;margin:0;padding:0}
+    .project-list li{display:grid;grid-template-columns:minmax(112px,.7fr) 1.3fr;gap:12px;padding:10px 0;border-top:1px solid rgba(45,49,66,.08);font-size:13px}
+    .project-list li:first-child{border-top:0}
+    .project-name{font-weight:600;color:var(--ink)}
+    .project-ability{color:var(--muted)}
+    .tag{display:inline-block;margin:2px 4px 0 0;padding:3px 6px;border:1px solid var(--rule-strong);border-radius:2px;color:var(--muted);font-size:9px;letter-spacing:.06em}
+    .tag.direct{border-color:rgba(124,143,111,.65);color:#566843}.tag.adapter{border-color:rgba(46,90,168,.35);color:var(--link)}
+    .tag.borrow{border-color:rgba(184,145,90,.55);color:#755a31}.tag.defer{border-color:rgba(156,107,80,.45);color:#7f513b}
+    .deliverable{margin-top:16px;padding:12px 14px;background:rgba(45,49,66,.035);border-left:3px solid var(--muted);color:var(--muted);font-size:13px}
+    .phase.current .deliverable{border-left-color:var(--accent)}
+    .table-wrap{overflow:auto;border:1px solid var(--rule);border-radius:6px;background:var(--white)}
+    table{width:100%;min-width:980px;border-collapse:collapse;font-size:13px}
+    th,td{padding:13px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+    th{background:rgba(45,49,66,.035);color:var(--muted);font:500 10px var(--mono);letter-spacing:.1em;text-transform:uppercase}
+    tbody tr:last-child td{border-bottom:0}
+    td:first-child{font-weight:600;color:var(--ink)}
+    .table-note{color:var(--soft);font-size:10px}
+    .now-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:20px}
+    .now-card{padding:24px;background:var(--white);border:1px solid var(--rule);border-radius:6px}
+    .now-card.focus{background:var(--accent-tint);border-color:rgba(235,108,54,.44)}
+    .now-card h3{margin-bottom:12px;font-size:17px}
+    .now-card ol,.now-card ul{margin:0;padding-left:20px;color:var(--muted);font-size:14px}
+    .now-card li+li{margin-top:7px}
+    .sources{columns:2;column-gap:32px;margin:0;padding-left:20px}
+    .sources li{break-inside:avoid;margin-bottom:8px;color:var(--muted);font-size:13px}
+    .footer{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:64px;padding-top:20px;border-top:1px solid var(--rule);color:var(--soft);font-size:11px;letter-spacing:.06em}
+    @media(max-width:900px){.page{padding:32px 18px 56px}.metrics,.phase-grid,.now-grid,.section-head,.route-note{grid-template-columns:1fr}.section-head{gap:12px}.metrics{margin-bottom:36px}.sources{columns:1}.project-list li{grid-template-columns:1fr}.header-meta{display:grid}.diagram-block{padding:16px}}
+    @media print{nav{display:none}.page{max-width:none;padding:24px}.phase,.metric,.now-card,.diagram-block{break-inside:avoid}a{color:var(--ink)}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <p class="eyebrow">Semantic Codebase · Open-source capability map</p>
+      <h1>从代码结构到认知编译：P0–P7 完整实施地图</h1>
+      <p class="lede">核心路线不是堆功能，而是逐层提升认知价值：先证明“比读文件更快”，再理解影响范围和程序行为，最后把有证据的软件知识编译成不同受众能消费的地图。</p>
+      <div class="header-meta">
+        <span>核对基线：2026-08-24</span>
+        <span>当前原型：V0.1 / P0–P2</span>
+        <span>运行边界：本地索引 · CLI + MCP · 不部署本地模型</span>
+      </div>
+    </header>
+
+    <div class="metrics" aria-label="项目路线摘要">
+      <article class="metric accent"><span class="metric-label">TOTAL STAGES</span><strong class="metric-value">8</strong><p>P0 Benchmark 到 P7 Cognitive Compiler。</p></article>
+      <article class="metric"><span class="metric-label">CURRENT PROTOTYPE</span><strong class="metric-value">P0–P2</strong><p>先形成可验证的结构语义内核。</p></article>
+      <article class="metric"><span class="metric-label">ACTUAL EXTERNAL RUNTIME</span><strong class="metric-value">Tree-sitter</strong><p>TS/Python 语法抽取已落地；其余多为计划或设计参考。</p></article>
+      <article class="metric"><span class="metric-label">OWNED CORE</span><strong class="metric-value">5</strong><p>Semantic、Evidence、Snapshot、Capability、Compiler 均自有。</p></article>
+    </div>
+
+    <nav aria-label="页面导航">
+      <a href="#route">总路线</a><a href="#phases">阶段详情</a><a href="#comparison">能力对比</a><a href="#now">当前落地</a><a href="#sources">查询来源</a>
+    </nav>
+
+    <section id="route">
+      <div class="section-head">
+        <div><p class="section-kicker">01 · Cognitive value ladder</p><h2>两段主图，覆盖八个阶段</h2></div>
+        <p class="section-intro">每张图使用一致的“问题、输入、参考能力、阶段输出”四个语义槽。主图只讲认知升级，具体项目边界放到下一节。</p>
+      </div>
+
+      <article class="diagram-block">
+        <h3>第一段 · 建立结构事实与任务上下文</h3>
+        <p class="diagram-caption">P0–P3：从验证价值，到可定位定义、结构关系，再到受预算约束的上下文包。</p>
+        <svg viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="route-core-title route-core-desc">
+          <title id="route-core-title">Semantic Codebase P0 到 P3 路线</title>
+          <desc id="route-core-desc">阶段矩阵展示 Benchmark、Definition Registry、Structural Code Graph 和 Context Engine 的问题、输入、参考能力与输出。</desc>
+          <defs>
+            <marker id="core-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#4f5d75"/></marker>
+            <marker id="core-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#eb6c36"/></marker>
+          </defs>
+          <rect width="1200" height="520" fill="#f5f5f5"/>
+          <g stroke="rgba(45,49,66,.12)" stroke-width=".8"><line x1="0" y1="104" x2="1200" y2="104"/><line x1="0" y1="184" x2="1200" y2="184"/><line x1="0" y1="264" x2="1200" y2="264"/><line x1="0" y1="344" x2="1200" y2="344"/><line x1="0" y1="424" x2="1200" y2="424"/></g>
+          <line x1="152" y1="64" x2="152" y2="424" stroke="rgba(45,49,66,.24)"/>
+          <g class="slot-label" text-anchor="middle"><text x="76" y="148">核心问题</text><text x="76" y="228">阶段输入</text><text x="76" y="308">参考能力</text><text x="76" y="388">阶段输出</text></g>
+          <g text-anchor="middle">
+            <rect class="stage-chip" x="256" y="24" width="32" height="24" rx="8"/><text class="stage-num" x="272" y="40">P0</text><text class="stage-label" x="272" y="68">BENCHMARK</text>
+            <rect class="stage-chip" x="520" y="24" width="32" height="24" rx="8"/><text class="stage-num" x="536" y="40">P1</text><text class="stage-label" x="536" y="68">DEFINITION</text>
+            <rect class="stage-chip focal" x="784" y="24" width="32" height="24" rx="8"/><text class="stage-num focal" x="800" y="40">P2</text><text class="stage-label focal" x="800" y="68">STRUCTURAL GRAPH</text>
+            <rect class="stage-chip" x="1048" y="24" width="32" height="24" rx="8"/><text class="stage-num" x="1064" y="40">P3</text><text class="stage-label" x="1064" y="68">CONTEXT ENGINE</text>
+          </g>
+          <line class="flow" x1="380" y1="388" x2="428" y2="388" marker-end="url(#core-arrow)"/>
+          <line class="flow focal" x1="644" y1="388" x2="692" y2="388" marker-end="url(#core-arrow-accent)"/>
+          <line class="flow focal" x1="908" y1="388" x2="956" y2="388" marker-end="url(#core-arrow-accent)"/>
+          <g text-anchor="middle">
+            <g><rect class="node" x="164" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="140">是否真的更快、更准</text><text class="cell-sub" x="272" y="160">并且更省上下文？</text></g>
+            <g><rect class="node input" x="164" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="220">冻结公开语料与题目</text><text class="cell-tech" x="272" y="240">baseline · receipts · gold isolation</text></g>
+            <g><rect class="node" x="164" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="300">CodeGraph 对照方法</text><text class="cell-sub" x="272" y="320">RepoBench · SWE-bench 方法</text></g>
+            <g><rect class="node output" x="164" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="380">可复放的价值证据</text><text class="cell-tech" x="272" y="400">benchmark manifest · run receipts</text></g>
+
+            <g><rect class="node" x="428" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="140">代码里有哪些定义</text><text class="cell-sub" x="536" y="160">且能否稳定定位与重建？</text></g>
+            <g><rect class="node input" x="428" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="220">TS / Python 源码</text><text class="cell-tech" x="536" y="240">repository + snapshot + source digest</text></g>
+            <g><rect class="node" x="428" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="300">Tree-sitter 为语法基线</text><text class="cell-sub" x="536" y="320">SCIP 富集 · Kythe 证据边界</text></g>
+            <g><rect class="node output" x="428" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="380">Definition + Evidence</text><text class="cell-tech" x="536" y="400">location · digest · coverage</text></g>
+
+            <g><rect class="node" x="692" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="140">定义如何发生结构关系</text><text class="cell-sub" x="800" y="160">包含、导入、调用、继承</text></g>
+            <g><rect class="node input" x="692" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="220">已验证定义与关系候选</text><text class="cell-tech" x="800" y="240">canonical IR · adapter evidence</text></g>
+            <g><rect class="node" x="692" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="300">CodeGraph / Kythe / Infigraph</text><text class="cell-sub" x="800" y="320">SQLite 图存储与有界查询</text></g>
+            <g><rect class="node focal" x="692" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="380">不可变 Structural Graph</text><text class="cell-tech" x="800" y="400">snapshot · graph store · six queries</text></g>
+
+            <g><rect class="node" x="956" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="140">一个任务该拿哪些上下文</text><text class="cell-sub" x="1064" y="160">如何在 Token 预算内解释？</text></g>
+            <g><rect class="node input" x="956" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="220">P2 查询结果 + 任务预算</text><text class="cell-tech" x="1064" y="240">snapshot · recipe · maxTokens</text></g>
+            <g><rect class="node" x="956" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="300">Aider repo-map 为主参考</text><text class="cell-sub" x="1064" y="320">RepoGraph · LocAgent 渐进展开</text></g>
+            <g><rect class="node output" x="956" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="380">可复现 ContextPackage</text><text class="cell-tech" x="1064" y="400">rank · truncate · explain</text></g>
+          </g>
+          <line x1="32" y1="444" x2="1168" y2="444" stroke="rgba(45,49,66,.12)"/>
+          <text class="legend-key" x="32" y="472">FLOW</text><line class="flow focal" x1="96" y1="468" x2="136" y2="468" marker-end="url(#core-arrow-accent)"/><text class="legend" x="152" y="472">当前原型的关键跃迁</text><line class="flow" x1="344" y1="468" x2="384" y2="468" marker-end="url(#core-arrow)"/><text class="legend" x="400" y="472">阶段输出进入下一阶段</text><text class="legend-key" x="760" y="472">FOCUS</text><text class="legend" x="824" y="472">V0.1 先完成 P0–P2；P3 等真实瓶颈</text>
+        </svg>
+      </article>
+
+      <article class="diagram-block">
+        <h3>第二段 · 从行为证据到面向受众的认知地图</h3>
+        <p class="diagram-caption">P4–P7：只有结构图无法回答真实问题时才进入行为分析；之后逐层形成软件事实、业务能力和可追溯投影。</p>
+        <svg viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="route-knowledge-title route-knowledge-desc">
+          <title id="route-knowledge-title">Semantic Codebase P4 到 P7 路线</title>
+          <desc id="route-knowledge-desc">阶段矩阵展示 Behavior Graph、Software Knowledge Graph、Capability Graph 和 Cognitive Compiler 的问题、输入、参考能力与输出。</desc>
+          <defs>
+            <marker id="knowledge-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#4f5d75"/></marker>
+            <marker id="knowledge-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#eb6c36"/></marker>
+          </defs>
+          <rect width="1200" height="520" fill="#f5f5f5"/>
+          <g stroke="rgba(45,49,66,.12)" stroke-width=".8"><line x1="0" y1="104" x2="1200" y2="104"/><line x1="0" y1="184" x2="1200" y2="184"/><line x1="0" y1="264" x2="1200" y2="264"/><line x1="0" y1="344" x2="1200" y2="344"/><line x1="0" y1="424" x2="1200" y2="424"/></g>
+          <line x1="152" y1="64" x2="152" y2="424" stroke="rgba(45,49,66,.24)"/>
+          <g class="slot-label" text-anchor="middle"><text x="76" y="148">核心问题</text><text x="76" y="228">阶段输入</text><text x="76" y="308">参考能力</text><text x="76" y="388">阶段输出</text></g>
+          <g text-anchor="middle">
+            <rect class="stage-chip" x="256" y="24" width="32" height="24" rx="8"/><text class="stage-num" x="272" y="40">P4</text><text class="stage-label" x="272" y="68">BEHAVIOR GRAPH</text>
+            <rect class="stage-chip" x="520" y="24" width="32" height="24" rx="8"/><text class="stage-num" x="536" y="40">P5</text><text class="stage-label" x="536" y="68">KNOWLEDGE GRAPH</text>
+            <rect class="stage-chip focal" x="784" y="24" width="32" height="24" rx="8"/><text class="stage-num focal" x="800" y="40">P6</text><text class="stage-label focal" x="800" y="68">CAPABILITY GRAPH</text>
+            <rect class="stage-chip" x="1048" y="24" width="32" height="24" rx="8"/><text class="stage-num" x="1064" y="40">P7</text><text class="stage-label" x="1064" y="68">COGNITIVE COMPILER</text>
+          </g>
+          <line class="flow" x1="380" y1="388" x2="428" y2="388" marker-end="url(#knowledge-arrow)"/>
+          <line class="flow focal" x1="644" y1="388" x2="692" y2="388" marker-end="url(#knowledge-arrow-accent)"/>
+          <line class="flow focal" x1="908" y1="388" x2="956" y2="388" marker-end="url(#knowledge-arrow-accent)"/>
+          <g text-anchor="middle">
+            <g><rect class="node" x="164" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="140">值和控制如何传播</text><text class="cell-sub" x="272" y="160">结构关系无法回答的路径</text></g>
+            <g><rect class="node input" x="164" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="220">冻结的行为问题与预算</text><text class="cell-tech" x="272" y="240">source · sink · flow scope</text></g>
+            <g><rect class="node" x="164" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="300">Joern / CodeQL 按需分析</text><text class="cell-sub" x="272" y="320">Semgrep 只作局部 Finding</text></g>
+            <g><rect class="node output" x="164" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="272" y="380">独立 Behavior Namespace</text><text class="cell-tech" x="272" y="400">CFG · dataflow · taint · diagnostics</text></g>
+
+            <g><rect class="node" x="428" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="140">如何统一软件知识</text><text class="cell-sub" x="536" y="160">同时保留来源与确定性？</text></g>
+            <g><rect class="node input" x="428" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="220">代码、配置、文档、观测</text><text class="cell-tech" x="536" y="240">allowed inputs · adapter receipts</text></g>
+            <g><rect class="node" x="428" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="300">PROV-O 来源词汇</text><text class="cell-sub" x="536" y="320">Graphify / OTel 受限 Adapter</text></g>
+            <g><rect class="node output" x="428" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="536" y="380">Fact + Evidence + AdapterRun</text><text class="cell-tech" x="536" y="400">certainty · provenance · snapshot</text></g>
+
+            <g><rect class="node" x="692" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="140">组件共同实现什么能力</text><text class="cell-sub" x="800" y="160">如何避免自动脑补业务语义？</text></g>
+            <g><rect class="node input" x="692" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="220">已审计 Evidence + 人工声明</text><text class="cell-tech" x="800" y="240">taxonomy · freshness · decisions</text></g>
+            <g><rect class="node" x="692" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="300">Backstage Catalog 为主参考</text><text class="cell-sub" x="800" y="320">聚类只生成候选，不发布事实</text></g>
+            <g><rect class="node focal" x="692" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="800" y="380">可解释 Capability Candidate</text><text class="cell-tech" x="800" y="400">accept · edit · merge · reject</text></g>
+
+            <g><rect class="node" x="956" y="112" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="140">不同受众该看到什么</text><text class="cell-sub" x="1064" y="160">为什么选择、又省略了什么？</text></g>
+            <g><rect class="node input" x="956" y="192" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="220">任务 + 已接受事实 + 预算</text><text class="cell-tech" x="1064" y="240">audience · projection · evidence</text></g>
+            <g><rect class="node" x="956" y="272" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="300">Archify 本地展示</text><text class="cell-sub" x="1064" y="320">Structurizr · 渐进披露体验</text></g>
+            <g><rect class="node output" x="956" y="352" width="216" height="64" rx="6"/><text class="cell-title" x="1064" y="380">Evidence-linked Projection</text><text class="cell-tech" x="1064" y="400">story · diagram · standalone HTML</text></g>
+          </g>
+          <line x1="32" y1="444" x2="1168" y2="444" stroke="rgba(45,49,66,.12)"/>
+          <text class="legend-key" x="32" y="472">FLOW</text><line class="flow focal" x1="96" y1="468" x2="136" y2="468" marker-end="url(#knowledge-arrow-accent)"/><text class="legend" x="152" y="472">知识转化为业务能力的关键跃迁</text><line class="flow" x1="400" y1="468" x2="440" y2="468" marker-end="url(#knowledge-arrow)"/><text class="legend" x="456" y="472">证据逐层进入下一阶段</text><text class="legend-key" x="760" y="472">RULE</text><text class="legend" x="816" y="472">外部项目永远不能替代自有事实模型</text>
+        </svg>
+      </article>
+
+      <div class="route-note">
+        <article class="note-card"><h3><span class="dot accent"></span>原型焦点</h3><p>现在只完成 P0–P2。先让结构事实、快照和查询可信，再根据真实瓶颈决定是否进入 P3。</p></article>
+        <article class="note-card"><h3><span class="dot ink"></span>权威边界</h3><p>Semantic、Evidence、Snapshot、Capability 和 Cognitive Compiler 均为自有模型；开源工具只在受控边界内发挥作用。</p></article>
+        <article class="note-card"><h3><span class="dot link"></span>采用梯度</h3><p>直接复用成熟解析器；复杂分析走 Adapter；模型与交互主要借鉴；边界不清的项目暂缓。</p></article>
+      </div>
+    </section>
+
+    <section id="phases">
+      <div class="section-head">
+        <div><p class="section-kicker">02 · Stage references</p><h2>每个阶段重点参考什么</h2></div>
+        <p class="section-intro">“参考”不等于“已安装”。每项都标明采用方式和边界，避免原型被外部项目的数据模型或副作用反向绑架。</p>
+      </div>
+      <div class="phase-grid">
+        <article class="phase"><div class="phase-top"><div><span class="phase-code">P0</span><h3>Benchmark</h3></div><span class="status">待实现 runner</span></div><p class="phase-question">判断结构化代码工具是否真的比直接读文件更快、更准、更省上下文。</p><ul class="project-list">
+          <li><span class="project-name">CodeGraph <span class="tag borrow">对照 / 借鉴</span></span><span class="project-ability">同题 Baseline 对照、CLI/MCP 可测表面、失败原因收据。</span></li>
+          <li><span class="project-name">RepoBench / SWE-bench <span class="tag borrow">方法参考</span></span><span class="project-ability">题目分层、Gold 隔离、容器化和回归评价方法。</span></li>
+          <li><span class="project-name">Codebase Memory <span class="tag defer">暂缓</span></span><span class="project-ability">只作市场观察；不安装 daemon，不采用外部 benchmark 声明。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>冻结语料、Baseline/V0.1 同题评测和逐次运行收据。</div></article>
+
+        <article class="phase current"><div class="phase-top"><div><span class="phase-code">P1</span><h3>Definition Registry</h3></div><span class="status live">Slice 1 已落地</span></div><p class="phase-question">识别 TS/Python 中可定位、可重建并绑定 Evidence 的定义。</p><ul class="project-list">
+          <li><span class="project-name">Tree-sitter <span class="tag direct">直接复用</span></span><span class="project-ability">逐文件 CST、声明候选、源码范围和确定性语法证据。</span></li>
+          <li><span class="project-name">SCIP / scip-typescript <span class="tag adapter">后置 Adapter</span></span><span class="project-ability">编译器级 Definition/Reference/Relationship 富集；失败不阻塞 core。</span></li>
+          <li><span class="project-name">Kythe / Unison / CodeGraph <span class="tag borrow">借鉴设计</span></span><span class="project-ability">身份与名称分离、Anchor/Evidence、抽取与解析分阶段。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>五类 Definition、位置、内容摘要、Evidence 与 Coverage。</div></article>
+
+        <article class="phase current"><div class="phase-top"><div><span class="phase-code">P2</span><h3>Structural Code Graph</h3></div><span class="status live">GraphStore 基础已落地</span></div><p class="phase-question">把定义组织成可追溯的包含、导入、引用、调用、继承和实现关系。</p><ul class="project-list">
+          <li><span class="project-name">CodeGraph <span class="tag borrow">重点读源码</span></span><span class="project-ability">SQLite、文件 hash 增量、抽取后解析、双向邻接和有界查询。</span></li>
+          <li><span class="project-name">Infigraph / Kythe <span class="tag borrow">借鉴设计</span></span><span class="project-ability">窄 GraphBackend；Relation 与多个 Evidence 分离。</span></li>
+          <li><span class="project-name">Tree-sitter + SCIP <span class="tag direct">直接复用</span><span class="tag adapter">Adapter</span></span><span class="project-ability">语法关系基线 + 经 Snapshot 校验的可选语义关系。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>不可变 Snapshot、自有 SQLite GraphStore、增量等价与六类有界查询。</div></article>
+
+        <article class="phase"><div class="phase-top"><div><span class="phase-code">P3</span><h3>Context Engine</h3></div><span class="status">等待真实瓶颈</span></div><p class="phase-question">针对具体任务和 Token 预算，选择、排序、裁剪并解释上下文。</p><ul class="project-list">
+          <li><span class="project-name">Aider repo-map <span class="tag borrow">首要参考</span></span><span class="project-ability">全仓符号概览、依赖排序和固定 Token 预算。</span></li>
+          <li><span class="project-name">RepoGraph / LocAgent <span class="tag borrow">借鉴设计</span></span><span class="project-ability">定义/引用子图、关键词到实体、有界邻域和证据源码。</span></li>
+          <li><span class="project-name">GitNexus <span class="tag defer">隔离参考</span></span><span class="project-ability">只借 maxTokens、allowlist、stale-index 边界；许可明确前不接入。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>同一 Snapshot/Recipe/预算可复现、可解释、可截断的 ContextPackage。</div></article>
+
+        <article class="phase"><div class="phase-top"><div><span class="phase-code">P4</span><h3>Behavior Graph</h3></div><span class="status">按问题触发</span></div><p class="phase-question">仅在 P2 无法回答时，分析值、控制和污点如何在程序中传播。</p><ul class="project-list">
+          <li><span class="project-name">Joern / CPG <span class="tag adapter">Adapter spike</span></span><span class="project-ability">AST、Call Graph、CFG、控制依赖、到达定义和 PDG 分层。</span></li>
+          <li><span class="project-name">CodeQL <span class="tag adapter">对比 spike</span></span><span class="project-ability">source/sink/barrier、局部优先和受限全局数据流。</span></li>
+          <li><span class="project-name">Semgrep CE <span class="tag adapter">Finding Adapter</span></span><span class="project-ability">确定、离线、单文件规则；不能冒充跨文件行为图。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>独立 Behavior namespace、CFG/数据流/污点路径、Coverage 和 Diagnostic。</div></article>
+
+        <article class="phase"><div class="phase-top"><div><span class="phase-code">P5</span><h3>Software Knowledge Graph</h3></div><span class="status">计划阶段</span></div><p class="phase-question">统一代码、配置、文档和运行观测，同时保留来源、确定性与保留策略。</p><ul class="project-list">
+          <li><span class="project-name">PROV-O <span class="tag borrow">词汇参考</span></span><span class="project-ability">Entity / Activity / Agent 与 generated / used / derived 来源边界。</span></li>
+          <li><span class="project-name">Graphify <span class="tag adapter">受限 Adapter</span></span><span class="project-ability">异构本地工件、确定性抽取与 EXTRACTED/INFERRED 分层。</span></li>
+          <li><span class="project-name">OpenTelemetry <span class="tag adapter">后置 Adapter</span></span><span class="project-ability">Resource、Span、时间窗和 observed 运行证据；不证明完整行为。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>自有 Fact + Evidence + AdapterRun + Snapshot 事实核。</div></article>
+
+        <article class="phase"><div class="phase-top"><div><span class="phase-code">P6</span><h3>Capability Graph</h3></div><span class="status">计划阶段</span></div><p class="phase-question">识别组件共同实现的产品/业务能力，并让每个候选都能解释和人工裁决。</p><ul class="project-list">
+          <li><span class="project-name">Backstage Catalog <span class="tag adapter">Adapter + 借鉴</span></span><span class="project-ability">Domain → System → Component/API/Resource、声明式 YAML 与 freshness。</span></li>
+          <li><span class="project-name">Graphify <span class="tag borrow">候选生成</span></span><span class="project-ability">聚类与报告只产生 CapabilityCandidate，必须回链 P5 Evidence。</span></li>
+          <li><span class="project-name">GitNexus <span class="tag defer">暂不接入</span></span><span class="project-ability">只借影响、聚类、流程的查询分面；许可证不清时不复制。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>Capability Candidate 及接受、修改、合并、拒绝的人工决策流。</div></article>
+
+        <article class="phase"><div class="phase-top"><div><span class="phase-code">P7</span><h3>Cognitive Compiler</h3></div><span class="status">展示器已就绪</span></div><p class="phase-question">按受众、任务和预算，把已接受事实编译为可理解、可追溯的故事与地图。</p><ul class="project-list">
+          <li><span class="project-name">Archify <span class="tag direct">构建期展示器</span></span><span class="project-ability">消费已验证 typed JSON，validate/deliver 自包含架构与流程 HTML。</span></li>
+          <li><span class="project-name">Structurizr <span class="tag borrow">借鉴设计</span></span><span class="project-ability">模型与视图分离、C4 分辨率；不作为默认运行时依赖。</span></li>
+          <li><span class="project-name">Understand Anything <span class="tag borrow">体验参考</span></span><span class="project-ability">探索、搜索、提问和渐进披露；模型摘要不进入事实管线。</span></li>
+        </ul><div class="deliverable"><strong>阶段产物：</strong>Evidence-linked Projection/Story、架构图和自包含 HTML。</div></article>
+      </div>
+    </section>
+
+    <section id="comparison">
+      <div class="section-head">
+        <div><p class="section-kicker">03 · Capability comparison</p><h2>能力对比与采用判断</h2></div>
+        <p class="section-intro">每一类能力只选一个主参考，其余补边界或做对照。优先复用确定性的底层能力，把会改变事实语义的部分留在自有模型中。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>能力层</th><th>主参考</th><th>最值得借鉴</th><th>采用方式</th><th>关键边界</th><th>进入时机</th></tr></thead>
+          <tbody>
+            <tr><td>语法定义抽取</td><td>Tree-sitter</td><td>跨 TS/Python 的确定性 CST、范围和增量解析</td><td><span class="tag direct">直接复用</span></td><td>不推断跨文件绑定、类型或运行行为</td><td><span class="table-note">P1 · 已落地</span></td></tr>
+            <tr><td>编译器级语义</td><td>SCIP / scip-typescript</td><td>Occurrence、Symbol、Definition/Reference/Relationship</td><td><span class="tag adapter">Adapter</span></td><td>外部 symbol 不能直接成为自有 Definition ID</td><td><span class="table-note">P1/P2 core 通过后</span></td></tr>
+            <tr><td>结构图工程</td><td>CodeGraph</td><td>SQLite、增量、解析分阶段、CLI/MCP 查询表面</td><td><span class="tag borrow">源码参考 + 对照</span></td><td>不复制领域枚举、schema 或 mutable 单库语义</td><td><span class="table-note">P0/P2 · 当前重点</span></td></tr>
+            <tr><td>图事实与证据</td><td>Kythe / Infigraph</td><td>Relation-Evidence 分离和窄 GraphBackend</td><td><span class="tag borrow">借鉴设计</span></td><td>不做 VName/Entry/Cypher 兼容层</td><td><span class="table-note">P1/P2</span></td></tr>
+            <tr><td>上下文编排</td><td>Aider repo-map</td><td>符号地图、图排序、固定 Token 预算</td><td><span class="tag borrow">借鉴设计</span></td><td>不复用聊天、提示词、缓存或固定 PageRank 参数</td><td><span class="table-note">P3 · 先观察瓶颈</span></td></tr>
+            <tr><td>行为分析</td><td>Joern / CodeQL</td><td>CPG、CFG、DataFlow、source/sink/barrier</td><td><span class="tag adapter">按需 Adapter</span></td><td>与 P2 结构图分层；无结果不等于不存在路径</td><td><span class="table-note">P4 · 冻结题触发</span></td></tr>
+            <tr><td>软件知识来源</td><td>PROV-O</td><td>Entity/Activity/Agent 与来源传播词汇</td><td><span class="tag borrow">借鉴设计</span></td><td>本地核心仍是 SQLite/JSON，不因标准引入 RDF/OWL</td><td><span class="table-note">P5</span></td></tr>
+            <tr><td>业务能力目录</td><td>Backstage Catalog</td><td>Domain/System/Component/API/Resource 和声明式关系</td><td><span class="tag adapter">只读 Adapter</span></td><td>owner 不是权限；聚类不能自动发布 Capability</td><td><span class="table-note">P6</span></td></tr>
+            <tr><td>认知投影</td><td>Archify + Structurizr</td><td>typed IR 校验渲染；模型与视图分离</td><td><span class="tag direct">展示器</span><span class="tag borrow">设计参考</span></td><td>展示工具不推断事实，视觉正确不等于语义正确</td><td><span class="table-note">P7</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="now">
+      <div class="section-head">
+        <div><p class="section-kicker">04 · Prototype landing</p><h2>现在真正要做什么</h2></div>
+        <p class="section-intro">当前代码已经完成 Slice 1 的 Definition/Evidence 与 SQLite Snapshot 基础，但还不是完整的 Structural Graph。</p>
+      </div>
+      <div class="now-grid">
+        <article class="now-card focus"><h3>下一条主线：继续完成 P2</h3><ol>
+          <li>补齐 Relation 抽取、解析与 Evidence 绑定。</li>
+          <li>实现增量同步与“增量结果等价于全量重建”。</li>
+          <li>完成六种有界查询，并让 CLI 与 MCP 共用严格 JSON 契约。</li>
+          <li>在冻结 CodeGraph 自举提交上形成首个真实项目演示。</li>
+          <li>运行轻量 Benchmark 后，再决定是否进入 P3。</li>
+        </ol></article>
+        <article class="now-card"><h3>当前明确不做</h3><ul>
+          <li>不部署本地模型或后台 daemon。</li>
+          <li>不提前引入图数据库、向量库或全局 3D UI。</li>
+          <li>不把 SCIP、Joern、Graphify 等计划项写成已落地。</li>
+          <li>不让 LLM 摘要或聚类成为权威事实。</li>
+          <li>不把私有源码发送到外部评测路径。</li>
+        </ul></article>
+      </div>
+    </section>
+
+    <section id="sources">
+      <div class="section-head">
+        <div><p class="section-kicker">05 · Query sources</p><h2>本地查询入口</h2></div>
+        <p class="section-intro">本页面是现有研究结论的可视化索引；需要核验采用状态、许可证风险或具体边界时，应回到下列 Markdown 源文档。</p>
+      </div>
+      <ul class="sources">
+        <li><a href="open-source-capability-map.md">P0–P7 开源项目能力地图</a></li>
+        <li><a href="open-source-reference-index.md">开源参考 A–Z 查询索引</a></li>
+        <li><a href="open-source-map-p0-p2.md">P0–P2 详细研究</a></li>
+        <li><a href="open-source-map-p3-p4.md">P3–P4 详细研究</a></li>
+        <li><a href="open-source-map-p5-p7.md">P5–P7 详细研究</a></li>
+        <li><a href="../v01-implementation-handoff.md">V0.1 实施切片与交接</a></li>
+        <li><a href="../map.md">总体决策地图</a></li>
+        <li><a href="frozen-benchmark-corpus.md">冻结 Benchmark Corpus</a></li>
+      </ul>
+    </section>
+
+    <footer class="footer"><span>semantic-codebase-stage-map.html</span><span>Diagram Design 2.6 · default editorial skin · static HTML</span></footer>
+  </main>
+</body>
+</html>
