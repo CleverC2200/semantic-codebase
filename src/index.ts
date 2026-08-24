@@ -4,3 +4,4 @@ export * from "./contract/validation.js";
 export * from "./syntax/index.js";
 export * from "./resolution/index.js";
 export * from "./canonicalization/index.js";
+export * from "./indexing/index.js";
