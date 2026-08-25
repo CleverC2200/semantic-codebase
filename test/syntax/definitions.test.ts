@@ -77,6 +77,18 @@ test("TypeScript extracts named definitions, containers and UTF-8 byte spans", (
   assert.equal(new Set(hashes).size, 1);
 });
 
+test("TypeScript parses sources larger than the tree-sitter string input limit", () => {
+  const source = `// 中文🙂${"a".repeat(32_768)}\nexport function afterLargePrefix() {}\n`;
+  const slice = extract(new TypeScriptTreeSitterAdapter(), source, "typescript", "src/large.ts");
+
+  assert.equal(slice.coverage.status, "complete");
+  assert.deepEqual(
+    slice.definitions.map(({ kind, qualified_name }) => [kind, qualified_name]),
+    [["function", "afterLargePrefix"]],
+  );
+  assertDefinitionSpans(source, slice);
+});
+
 test("Python extracts decorated/async methods and keeps nested functions as functions", () => {
   const source = [
     "# class Fake: pass 中文🙂",

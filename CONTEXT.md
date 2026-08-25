@@ -6,7 +6,8 @@ Semantic Codebase 是面向人和 AI Agent 的软件认知模型。它把源代�
 
 - 当前仓库是 Semantic Codebase 自研项目的唯一 Git 根目录。
 - 自研实现从仓库顶层开始，`references/` 中的源码只用于研究、比较和验证设计。
-- `references/semantic-codebase/` 是早期 Slice 1 原型，`references/codegraph/` 是外部 CodeGraph 快照；二者都不是当前产品源码或独立 Git 仓库。
+- `references/zod/` 是冻结的真实项目测试语料，`references/codegraph/` 是外部 CodeGraph 快照；二者都不是当前产品源码或独立 Git 仓库。
+- 早期 Slice 1 原型已退役，仅通过历史验收收据和本地发布前备份保留证据。
 
 ## Language
 

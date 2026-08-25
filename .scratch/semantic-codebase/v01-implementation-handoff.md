@@ -2,7 +2,7 @@
 
 > 状态：历史交接，已被当前顶层项目边界取代
 >
-> 2026-08-24 起，本交接对应的 Slice 1 已移入 `references/semantic-codebase/`，只作参考；新的 Semantic Codebase 从顶层仓库重新实现，不继续执行本文的旧代码落点和“下一任务”指令。
+> 本交接对应的 Slice 1 后曾移入 `references/semantic-codebase/`，并于 2026-08-25 从当前工作区退役；必要时可从本地发布前 Git bundle 恢复。新的 Semantic Codebase 从顶层仓库实现，不继续执行本文的旧代码落点和“下一任务”指令。
 >
 > 目标：让一位主要开发者与 AI Agent 不再重开产品或架构决策，按纵向切片尽快交付一个可体验的 TypeScript/Python Code Intelligence 原型。
 
@@ -21,7 +21,7 @@ V0.1 只覆盖 P0～P2：把 TypeScript/Python 源码构建为本地、不可变
 
 ## 2. 代码落点与技术基线
 
-历史 Slice 1 现归档在：
+历史 Slice 1 当时曾归档在（当前已退役）：
 
 ```text
 references/semantic-codebase/
@@ -33,7 +33,7 @@ references/semantic-codebase/
 references/codegraph/
 ```
 
-二者均由顶层 Git 仓库统一管理，只作为研究参考，不是当前自有产品的源码起点。
+上述是历史目录形式；当前仅 CodeGraph 作为本地 Reference 保留，它不是自有产品的源码起点。
 
 默认技术基线：
 
@@ -292,7 +292,7 @@ CLI 和 MCP 只做参数/transport 转换，必须调用同一 Contract、Index 
 - [x] Prototype/Release Gate 已冻结。
 - [x] 开源项目借鉴与不照搬边界已记录。
 - [x] 冻结 Corpus 与 Agent Smoke 方案已记录。
-- [x] 历史上创建并完成 Slice 1；现归档于 `references/semantic-codebase/`，验收见 [Slice 1 Acceptance Receipt](receipts/slice-1-acceptance.md)。
+- [x] 历史上创建并完成 Slice 1；该实现已退役，验收见 [Slice 1 Acceptance Receipt](receipts/slice-1-acceptance.md)。
 
 ## 9. 第一个实施动作
 

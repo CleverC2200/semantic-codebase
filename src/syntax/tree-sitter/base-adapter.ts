@@ -53,6 +53,7 @@ export interface CandidateExtraction {
 }
 
 const DEFAULT_MAX_SOURCE_BYTES = 2_000_000;
+const TREE_SITTER_INPUT_CHUNK_CHARACTERS = 32_000;
 
 function spanOf(node: Parser.SyntaxNode): ByteSpan {
   return { start_byte: node.startIndex, end_byte: node.endIndex };
@@ -136,7 +137,9 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
 
     const parser = new Parser();
     parser.setLanguage(this.language);
-    const tree = parser.parse(sourceText);
+    const tree = parser.parse((index) =>
+      sourceText.slice(index, index + TREE_SITTER_INPUT_CHUNK_CHARACTERS),
+    );
     const offsetMap = createUtf8OffsetMap(sourceText);
     const diagnostics = collectSyntaxDiagnostics(tree.rootNode, input.relative_path, offsetMap);
     const rawDefinitions = this.collectDefinitions(tree.rootNode);

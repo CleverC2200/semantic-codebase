@@ -1,8 +1,8 @@
 # Semantic Codebase 开源参考索引
 
-> 核对日期：2026-08-24（Asia/Shanghai）。范围仅限现有研究资产、归档于 `references/semantic-codebase/` 的早期原型、`references/codegraph/` 本地源码，以及这些资产已链接的官方仓库/官方文档；没有安装、运行或联网核验任何外部项目。本文件不是许可证法律意见。
+> 核对日期：2026-08-25（Asia/Shanghai）。范围包括现有研究资产、`references/codegraph/` 本地源码、已固定到冻结提交的 `references/zod/`，以及这些资产已链接的官方仓库/官方文档。早期 Semantic Codebase 原型已退役，只在历史验收收据和本地发布前 Git bundle 中保留证据。本文件不是许可证法律意见。
 >
-> 当前边界：两个本地源码目录都只是 Reference；“已落地”表示早期原型中曾实现，不代表当前从顶层重新开始的产品已经采用。
+> 当前边界：CodeGraph 和 Zod 都只是 Reference/测试语料；“早期原型曾落地”是历史状态，不代表当前顶层产品的采用情况。
 
 ## 查询说明
 
@@ -24,7 +24,7 @@ rg -n "已落地|已定计划|借鉴设计|受限 Adapter|暂缓/不采用" \
 rg -n "P2|Structural Code Graph" .scratch/semantic-codebase/research/open-source-reference-index.md
 
 # 查实际代码证据
-rg -n "当前落地证据|references/semantic-codebase" \
+rg -n "当前落地证据|references/zod|早期原型" \
   .scratch/semantic-codebase/research/open-source-reference-index.md
 ```
 
@@ -32,7 +32,7 @@ rg -n "当前落地证据|references/semantic-codebase" \
 
 | 标记 | 含义 |
 | --- | --- |
-| **已落地** | 早期参考原型代码或 `package.json` 曾实际使用；不代表当前顶层产品已采用。 |
+| **早期原型曾落地** | 退役原型中曾实际使用；只由历史收据和备份取证，不代表当前顶层产品已采用。 |
 | **已定计划** | 路线已接受，但尚无本产品实现/依赖。 |
 | **借鉴设计** | 只借模型、边界或交互，禁止复制其协议/实现。 |
 | **受限 Adapter** | 未来可导入带版本、配置、输入摘要、Evidence 的外部结果；不是当前依赖。 |
@@ -45,8 +45,8 @@ rg -n "当前落地证据|references/semantic-codebase" \
 | 阶段 | 调研问题与结论 | 当前采用状态 | 当前落地/复审闸门 |
 | --- | --- | --- | --- |
 | P0 Benchmark | 以冻结公开提交、结构内核与 Agent 双轨验证价值；不能复述外部项目数据。CodeGraph 仅独立对照。 | **对照/语料**；尚未实现 runner。 | 冻结语料已定；四外部项目仍须本地双冷启动后入库。 |
-| P1 Definition Registry | Tree-sitter 是 TS/Python 共同语法基线；SCIP 是版本绑定的离线富集。 | **早期参考原型已落地**；当前顶层产品未采用。 | `references/semantic-codebase/` 中的 `TreeSitterAdapter` 曾提取五类 Definition。 |
-| P2 Structural Code Graph | 不可变 Snapshot + SQLite GraphStore 是早期方案；外部图模型只提供先例。 | **早期参考原型已落地**；当前顶层产品未采用。 | 参考原型已有 SQLite、Snapshot、Definition/Evidence；新实现需重新决策和验收。 |
+| P1 Definition Registry | Tree-sitter 是 TS/Python 共同语法基线；SCIP 是版本绑定的离线富集。 | **早期原型曾落地**；当前采用情况以顶层源码和 Spec 为准。 | [Slice 1 验收收据](../receipts/slice-1-acceptance.md) 记录了五类 Definition 抽取；原型源码已退役。 |
+| P2 Structural Code Graph | 不可变 Snapshot + SQLite GraphStore 是早期方案；外部图模型只提供先例。 | **早期原型曾落地**；当前采用情况以顶层源码和 Spec 为准。 | 收据记录了 SQLite、Snapshot、Definition/Evidence；原型源码已退役。 |
 | P3 Context Engine | P2 查询按任务/预算编译为可复现 `ContextPackage`，不建第二张图。 | **借鉴设计/暂缓**。 | 仅在 P2 Benchmark 显示多查询冗余后，评测 Aider 式排序配方。 |
 | P4 Behavior Graph | 与 P2 分层；按问题触发 Joern/CodeQL spike，Semgrep 仅单文件 Finding。 | **受限 Adapter（计划）**。 | 先有至少 5 个冻结 TS/Python 行为题、预算和离线复放能力。 |
 | P5 Software Knowledge Graph | 自有 Fact/Evidence/AdapterRun/Snapshot 为事实核；PROV-O 只提供来源词汇。 | **借鉴设计/受限 Adapter（计划）**。 | 先审计输入范围、许可、隐私和收据；动态观测需 P4 已定。 |
@@ -57,8 +57,8 @@ rg -n "当前落地证据|references/semantic-codebase" \
 
 | 分类 | 项目/能力 | 可见证据 | 边界 |
 | --- | --- | --- | --- |
-| 早期参考原型曾落地 | Tree-sitter runtime、TypeScript grammar、Python grammar | `references/semantic-codebase/package.json:15-17`；`src/syntax/tree-sitter-adapter.ts:1-4,38-47` | 只产出 TS/Python 语法 Definition/Evidence；当前顶层产品尚未采用。 |
-| 早期参考原型曾落地 | SQLite（Node 24 `node:sqlite`）GraphStore | `references/semantic-codebase/src/store/graph-store.ts:1-4,28-88`；`README.md:1-4` | 仅是参考实现，不决定当前产品存储方案。 |
+| 早期原型曾落地 | Tree-sitter runtime、TypeScript grammar、Python grammar | [Slice 1 验收收据](../receipts/slice-1-acceptance.md) 与本地发布前 Git bundle | 原型源码已退役；当前采用情况以顶层源码和 Spec 为准。 |
+| 早期原型曾落地 | SQLite（Node 24 `node:sqlite`）GraphStore | [Slice 1 验收收据](../receipts/slice-1-acceptance.md) 与本地发布前 Git bundle | 原型源码已退役；不决定当前产品存储方案。 |
 | 本地参考，不是依赖 | CodeGraph | `references/codegraph/package.json:1-61`；`references/codegraph/README.md:473-502` | 本地源码快照是实现参考/P0 对照；不得作为 Semantic Codebase 运行时 Adapter。 |
 | 仅规划 | SCIP、scip-typescript、Joern、CodeQL、Semgrep、Backstage、Graphify、OpenTelemetry、Archify | P1–P7 研究表及阶段闸门 | 没有产品锁定依赖、Adapter、二进制或服务配置。 |
 | 仅规划/借鉴 | Aider、Infigraph、Kythe、Unison、RepoGraph、LocAgent、Structurizr、Understand Anything、PROV-O | 各阶段研究表 | 不复制协议、存储格式、模型输出或 UI。 |
@@ -116,7 +116,7 @@ rg -n "当前落地证据|references/semantic-codebase" \
 | Unison（P1/P2） | [unisonweb/unison](https://github.com/unisonweb/unison) | 内容寻址代码与显示名称分离。 | **借鉴设计**，不是 TS/Python 索引器。 | Snapshot/Definition Key 是自有实现，见 `src/indexing/index.ts:14-25,45-55`。 | 仅在未来跨 Snapshot lineage/缓存需求出现时复盘。 |
 | Understand Anything（P7） | [Egonex-AI/Understand-Anything](https://github.com/Egonex-AI/Understand-Anything) | 探索/搜索/问答/分层深入；Tree-sitter + LLM hybrid。 | **借鉴设计**，不进入事实管线。 | 无。 | 体验对照只能用隔离公开语料；P7 叙述必须来自已接受 Fact/Capability。 |
 | VitePress（P0 Corpus） | [vuejs/vitepress](https://github.com/vuejs/vitepress) | 冻结候选仅 72 个 TS/TSX。 | **淘汰语料候选**：低于 80 文件下限。 | 无。 | 仅尺度政策变更时重评。 |
-| Zod（P0 Corpus） | [colinhacks/zod](https://github.com/colinhacks/zod) | 冻结 TS 库语料：MIT，commit `1fb56a5…`。 | **对照/语料**，未作依赖。 | 未在本机拉取。 | 本地双冷启动、固定 lock/CI 复放。 |
+| Zod（P0 Corpus） | [colinhacks/zod](https://github.com/colinhacks/zod) | 冻结 TS 库语料：MIT，commit `1fb56a5…`；排除测试/基准/fixture 后为 107 个 TS/TSX 文件。 | **对照/语料**，未作依赖；当前首选真实项目测试输入。 | 本地 `references/zod/`；HEAD/tree 与冻结清单一致，已移除子仓库 `.git`。13 文件的 v3 子集已生成 Ready Snapshot；完整范围因 v4 `in`/`out` variance annotations 产生 21 个语法错误，保留为 grammar 升级门禁。 | 先解除完整范围的 grammar 兼容缺口，再执行本地双冷启动和固定 lock/CI 复放。 |
 
 ## 工作区中的开源工具
 
@@ -138,7 +138,7 @@ rg -n "当前落地证据|references/semantic-codebase" \
 | Understand Anything / LocAgent | 含 LLM 或模型调用路径。 | 只借体验/检索思想；私有源码不进入此类路径。 |
 | CodeQL / Semgrep / Joern | 二进制、query pack、规则及其许可/运行成本尚未逐次准入。 | 仅未来、版本固定、离线的 Adapter spike；失败/无结果均为 Diagnostic，不冒充事实。 |
 | SCIP Python | 依赖 Python、Node、激活环境和包可见性。 | 实验性；调用者需提供审计过的环境，不自动安装依赖。 |
-| Benchmark Corpus | 四个真实项目只核验官方固定版本/命令，未本地克隆或双冷启动。 | 不得声称已可运行；双冷启动失败就淘汰。 |
+| Benchmark Corpus | Zod 已按冻结 commit/tree 拉取，v3 子集 smoke 已通过，但完整范围尚有 grammar 兼容缺口且未执行上游双冷启动；其余三个真实项目仍未本地克隆。 | 不得声称已完成 Corpus 入库；不得把子集 smoke 冒充完整项目通过。 |
 | 本地模型研究 | 用户已决定不维护本地模型；旧候选不能被视为授权。 | 路线使用现有 Codex；重新采用需要明确新授权。 |
 
 ## 本地证据导航
@@ -154,7 +154,8 @@ rg -n "当前落地证据|references/semantic-codebase" \
 | 本地 Agent runtime 的历史未采用决定 | [`local-agent-runtime.md`](local-agent-runtime.md) 开头的“未采用”声明；[`map.md`](../map.md) 的 out-of-scope 条目。 |
 | 设计票据到研究资产的映射 | [`issues/`](../issues/) 中 `01`–`16`；每张票的 `Answer`/`Disposition` 指向对应研究结论。 |
 | V0.1 边界、后续切片和非目标 | [`v01-implementation-handoff.md`](../v01-implementation-handoff.md)；重点 Slice 1 与风险/非目标。 |
-| 早期原型依赖与实现参考 | [`references/semantic-codebase/package.json`](../../../references/semantic-codebase/package.json)；[`tree-sitter-adapter.ts`](../../../references/semantic-codebase/src/syntax/tree-sitter-adapter.ts)；[`index.ts`](../../../references/semantic-codebase/src/indexing/index.ts)；[`graph-store.ts`](../../../references/semantic-codebase/src/store/graph-store.ts)；[`README.md`](../../../references/semantic-codebase/README.md)。 |
+| 早期原型历史证据 | [Slice 1 验收收据](../receipts/slice-1-acceptance.md)；必要时从 `.workspace/backups/pre-public-with-references.bundle` 恢复受 Git 跟踪的源码。 |
+| 首选真实项目测试语料 | [`references/zod/packages/zod/src/`](../../../references/zod/packages/zod/src/)；版本、排除规则和复放命令见 [`frozen-benchmark-corpus.md`](frozen-benchmark-corpus.md)。 |
 | 本地 CodeGraph 一手参考 | [`references/codegraph/README.md`](../../../references/codegraph/README.md)；[`package.json`](../../../references/codegraph/package.json)；[`LICENSE`](../../../references/codegraph/LICENSE)。 |
 | 工作区制图工具与既有工件 | [`Archify`](../../../references/codegraph/.agents/skills/archify/SKILL.md)；[`CodeGraph 架构图`](../../../references/codegraph/docs/codegraph-runtime-architecture.html)；[`diagram-design`](../../../.agents/skills/diagram-design/SKILL.md)。 |
 

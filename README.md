@@ -10,15 +10,17 @@ Semantic Codebase/
 ├── CONTEXT.md
 ├── .scratch/                       # 研究、决策与历史验收资料
 ├── references/                     # 本地研究资料，Git 忽略
-│   ├── semantic-codebase/          # 早期 Slice 1 原型，作为参考保留
+│   ├── zod/                        # 冻结的 TypeScript 真实项目测试语料
 │   └── codegraph/                  # colbymchenry/codegraph 本地参考快照
 └── src/、test/、docs/              # 后续自研实现从顶层逐步建立
 ```
 
 ## 项目边界
 
-- 自研代码从项目顶层重新开始，不以 `references/semantic-codebase/` 为产品源码起点。
+- 自研代码位于项目顶层，`references/` 中的项目不是产品源码。
+- 本地 `references/zod/` 固定为 Zod `1fb56a5c18c27102dbc92260a4007c7732a0ccca`；当前以其 13 文件的 `packages/zod/src/v3/` 作为快速 smoke，完整 107 文件作为后续 grammar 兼容与性能门禁。
 - 本地 `references/codegraph/` 可保存 CodeGraph 快照，用于学习抽取、解析、存储和查询的工程实现。
+- 早期 Slice 1 原型已从 `references/` 退役；历史行为以验收收据为准，必要时可从本地发布前 Git bundle 恢复。
 - 引用项目中的代码、依赖、Skill、构建产物和历史资料不能自动视为本项目设计或产品依赖。
 - 引用项目的来源、基线和本地状态只在本地 `references/README.md` 维护，不随公开仓库发布。
 
