@@ -16,6 +16,28 @@ const referenceRoot = path.join(projectRoot, "references/zod");
 const corpusRoot = path.join(referenceRoot, "packages/zod/src/v3");
 const outputRoot = path.join(projectRoot, ".workspace/benchmark/zod");
 const excludedDirectories = new Set(["tests", "__tests__", "benchmarks", "fixtures"]);
+const definitionKindLabels = {
+  class: "类",
+  function: "函数",
+  interface: "接口",
+  method: "方法",
+  module: "模块",
+};
+const relationKindLabels = {
+  CALLS: "调用",
+  CONTAINS: "包含",
+  EXPORTS: "导出",
+  IMPLEMENTS: "实现",
+  IMPORTS: "导入",
+  INHERITS: "继承",
+  REFERENCES: "引用",
+};
+const diagnosticSeverityLabels = { error: "错误", info: "信息", warning: "警告" };
+const diagnosticCodeLabels = {
+  unresolved_relation_candidate: "未解析关系候选",
+  unsupported_anonymous_definition: "不支持的匿名定义",
+};
+const relationOriginLabels = { resolver: "解析器", syntax_exact: "语法精确关系" };
 
 const corpusContract = {
   repository_id: "zod-v3-smoke-at-frozen-v4.4.3",
@@ -143,38 +165,38 @@ function renderSummary(graph, receipt) {
     )
     .slice(0, 20)
     .map((definition) =>
-      `| ${escapeCell(definition.kind)} | ${escapeCell(definition.qualified_name)} | ${escapeCell(definition.file_path)} | ${definition.definition_span.start_byte}-${definition.definition_span.end_byte} |`,
+      `| ${escapeCell(label(definition.kind, definitionKindLabels))} | ${escapeCell(definition.qualified_name)} | ${escapeCell(definition.file_path)} | ${definition.definition_span.start_byte}-${definition.definition_span.end_byte} |`,
     );
   const relationRows = graph.relations.slice(0, 20).map((relation) =>
-    `| ${escapeCell(relation.kind)} | ${escapeCell(endpointLabel(relation.source, definitionsByKey))} | ${escapeCell(endpointLabel(relation.target, definitionsByKey))} | ${escapeCell(relation.origin)} |`,
+    `| ${escapeCell(label(relation.kind, relationKindLabels))} | ${escapeCell(endpointLabel(relation.source, definitionsByKey))} | ${escapeCell(endpointLabel(relation.target, definitionsByKey))} | ${escapeCell(label(relation.origin, relationOriginLabels))} |`,
   );
 
-  return `# Zod v3 Semantic Codebase Smoke\n\n` +
-    `Generated: ${receipt.generated_at}\n\n` +
-    `## Corpus\n\n` +
-    `- Upstream: ${receipt.corpus.upstream}\n` +
-    `- Revision: \`${receipt.corpus.revision}\`\n` +
-    `- Source root: \`${receipt.corpus.root}\`\n` +
-    `- Files: ${receipt.corpus.files}\n` +
-    `- Bytes: ${receipt.corpus.bytes}\n` +
-    `- Manifest digest: \`${receipt.corpus.manifest_digest}\`\n\n` +
-    `## Result\n\n` +
-    `- Coverage: **${graph.coverage.status}**\n` +
-    `- Snapshot ID: \`${graph.snapshot_id}\`\n` +
-    `- Graph hash: \`${graph.graph_hash}\`\n` +
-    `- Snapshot SHA-256: \`${receipt.artifacts.snapshot_sha256}\`\n` +
-    `- Definitions: ${graph.definitions.length} (${formatCounts(definitionsByKind)})\n` +
-    `- Relations: ${graph.relations.length} (${formatCounts(relationsByKind)})\n` +
-    `- Unresolved candidates: ${graph.unresolved_candidates.length}\n` +
-    `- Evidence: ${graph.evidence.length}\n` +
-    `- Diagnostics: ${graph.diagnostics.length} (${formatCounts(diagnosticsBySeverity)}; ${formatCounts(diagnosticsByCode)})\n` +
-    `- Elapsed: ${receipt.runtime.elapsed_ms} ms\n\n` +
-    `## Definition sample\n\n` +
-    `| Kind | Qualified name | File | Byte span |\n` +
+  return `# Zod v3 Semantic Codebase 冒烟测试摘要\n\n` +
+    `生成时间：${receipt.generated_at}\n\n` +
+    `## 语料\n\n` +
+    `- 上游仓库：${receipt.corpus.upstream}\n` +
+    `- 固定提交：\`${receipt.corpus.revision}\`\n` +
+    `- 源码根目录：\`${receipt.corpus.root}\`\n` +
+    `- 文件数：${receipt.corpus.files}\n` +
+    `- 源码字节数：${receipt.corpus.bytes}\n` +
+    `- 清单摘要：\`${receipt.corpus.manifest_digest}\`\n\n` +
+    `## 结果\n\n` +
+    `- 覆盖状态：**就绪（${graph.coverage.status}）**\n` +
+    `- 快照 ID：\`${graph.snapshot_id}\`\n` +
+    `- 图哈希：\`${graph.graph_hash}\`\n` +
+    `- 快照 SHA-256：\`${receipt.artifacts.snapshot_sha256}\`\n` +
+    `- 定义：${graph.definitions.length} 个（${formatCounts(definitionsByKind, definitionKindLabels)}）\n` +
+    `- 关系：${graph.relations.length} 条（${formatCounts(relationsByKind, relationKindLabels)}）\n` +
+    `- 未解析候选：${graph.unresolved_candidates.length} 个\n` +
+    `- 证据：${graph.evidence.length} 条\n` +
+    `- 诊断：${graph.diagnostics.length} 条（${formatCounts(diagnosticsBySeverity, diagnosticSeverityLabels)}；${formatCounts(diagnosticsByCode, diagnosticCodeLabels)}）\n` +
+    `- 耗时：${receipt.runtime.elapsed_ms} 毫秒\n\n` +
+    `## 定义样例\n\n` +
+    `| 类型 | 限定名称 | 文件 | 字节范围 |\n` +
     `| --- | --- | --- | --- |\n` +
     `${definitionRows.join("\n")}\n\n` +
-    `## Relation sample\n\n` +
-    `| Kind | Source | Target | Origin |\n` +
+    `## 关系样例\n\n` +
+    `| 类型 | 来源 | 目标 | 产生方式 |\n` +
     `| --- | --- | --- | --- |\n` +
     `${relationRows.join("\n")}\n`;
 }
@@ -188,8 +210,12 @@ function countBy(items, selector) {
   return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right));
 }
 
-function formatCounts(counts) {
-  return counts.map(([name, count]) => `${name}=${count}`).join(", ");
+function formatCounts(counts, labels = {}) {
+  return counts.map(([name, count]) => `${label(name, labels)}=${count}`).join("，");
+}
+
+function label(value, labels) {
+  return labels[value] ?? value;
 }
 
 function endpointLabel(endpoint, definitionsByKey) {
