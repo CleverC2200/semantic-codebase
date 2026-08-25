@@ -33,3 +33,17 @@ Semantic Codebase/
 - [早期 V0.1 实施交接](.scratch/semantic-codebase/v01-implementation-handoff.md)
 
 `.scratch/semantic-codebase/` 中部分文件记录此前以早期原型作为产品实现的历史方案。当前项目边界以本 README 为准。
+
+## Zod 本地 smoke
+
+`references/zod/` 存在时，可生成一份可查看、可复核的 Zod v3 代码图谱：
+
+```bash
+npm run corpus:zod
+```
+
+生成物位于已忽略的 `.workspace/benchmark/zod/`：
+
+- `summary.md`：人工阅读的指标和 Definition/Relation 样例。
+- `receipt.json`：语料版本、Manifest、运行环境和生成物哈希。
+- `snapshot.json`：完整的机器可读 IndexState 和 Canonical Graph。
