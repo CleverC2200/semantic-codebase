@@ -7,7 +7,8 @@
     ".": "./dist/index.js"
   },
   "bin": {
-    "scb": "./dist/cli/main.js"
+    "scb": "./dist/cli/main.js",
+    "scb-mcp": "./dist/mcp/server.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-query-assets.mjs",

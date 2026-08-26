@@ -31,12 +31,19 @@ const require = createRequire(import.meta.url);
 export class SqliteSnapshotStore implements SnapshotStore {
   private readonly database: DatabaseSyncType;
 
-  constructor(readonly databasePath: string) {
-    mkdirSync(path.dirname(path.resolve(databasePath)), { recursive: true });
+  constructor(
+    readonly databasePath: string,
+    options: { read_only?: boolean } = {},
+  ) {
+    if (!options.read_only) mkdirSync(path.dirname(path.resolve(databasePath)), { recursive: true });
     const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
-    this.database = new DatabaseSync(databasePath);
-    this.database.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
-    this.migrate();
+    this.database = new DatabaseSync(databasePath, { readOnly: options.read_only ?? false });
+    if (options.read_only) {
+      this.database.exec("PRAGMA query_only = ON; PRAGMA foreign_keys = ON;");
+    } else {
+      this.database.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
+      this.migrate();
+    }
   }
 
   beginBuild(repositoryId: string, snapshotId: string): void {

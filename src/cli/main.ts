@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { canonicalJson } from "../contract/hash.js";
 import type { RelationKind } from "../contract/types.js";
 import { RepositoryIndexer } from "../indexing/indexer.js";
-import { IndexBuildError, type IndexBuildResult, type IndexState } from "../indexing/types.js";
+import { IndexBuildError, type IndexBuildResult } from "../indexing/types.js";
 import { DefinitionQueryService } from "../query/definition-query.js";
 import { GraphQueryService } from "../query/graph-query.js";
 import { QueryError } from "../query/types.js";
@@ -13,6 +13,7 @@ import {
   repositoryManifestSummary,
   RepositorySourceError,
 } from "../repository/source.js";
+import { repositoryStatus } from "../repository/status.js";
 import { PythonTreeSitterAdapter, TypeScriptTreeSitterAdapter } from "../syntax/index.js";
 import { SqliteSnapshotStore } from "../store/sqlite-store.js";
 import { SnapshotStoreError } from "../store/types.js";
@@ -62,7 +63,7 @@ function execute(
     return publishIndexResult(command, discovered, store, result);
   }
   if (command === "status") {
-    return statusOutput(discovered, store);
+    return repositoryStatus(discovered, store);
   }
 
   const query = new DefinitionQueryService(store);
@@ -164,39 +165,6 @@ function publishIndexResult(
     receipt: result.receipt,
     reused_snapshot: Boolean(existing),
     store_path: discovered.store_path,
-  };
-}
-
-function statusOutput(
-  discovered: ReturnType<typeof discoverRepository>,
-  store: SqliteSnapshotStore,
-): unknown {
-  const current = store.getCurrentReady(discovered.source.repository_id);
-  const observed = repositoryManifestSummary(discovered.source);
-  const indexed = current ? manifestSummaryForState(current) : null;
-  const freshness = !indexed ? "unknown" : indexed.digest === observed.digest ? "fresh" : "stale";
-  return {
-    schema_version: 1,
-    command: "status",
-    repository_id: discovered.source.repository_id,
-    store_path: discovered.store_path,
-    current_ready: current
-      ? { snapshot_id: current.snapshot_id, graph_hash: current.graph.graph_hash, coverage: current.graph.coverage }
-      : null,
-    freshness: {
-      status: freshness,
-      reason: !indexed ? "no_ready_snapshot" : freshness === "stale" ? "manifest_digest_mismatch" : null,
-      observed_manifest: observed,
-      indexed_manifest: indexed,
-    },
-  };
-}
-
-function manifestSummaryForState(state: IndexState) {
-  return {
-    digest: state.source_manifest_digest,
-    file_count: state.manifest.files.length,
-    byte_length: state.manifest.files.reduce((total, file) => total + file.byte_length, 0),
   };
 }
 
