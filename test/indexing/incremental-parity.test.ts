@@ -96,6 +96,23 @@ test("Adapter query/config change invalidates reusable slices", () => {
   assert.deepEqual(result.receipt.reused_files, ["pkg/helpers.py", "pkg/main.py"]);
 });
 
+test("Canonical IR and index config participate in Snapshot identity", () => {
+  const baseline = indexer().buildFull(source(baseFiles)).state;
+  const adapter = new TypeScriptTreeSitterAdapter();
+  const irChanged = new RepositoryIndexer({
+    adapters: [adapter, new PythonTreeSitterAdapter()],
+    canonical_ir_version: "2",
+  }).buildFull(source(baseFiles)).state;
+  const configChanged = new RepositoryIndexer({
+    adapters: [new TypeScriptTreeSitterAdapter(), new PythonTreeSitterAdapter()],
+    index_config: { exclusions: ["generated"] },
+  }).buildFull(source(baseFiles)).state;
+
+  assert.notEqual(irChanged.snapshot_id, baseline.snapshot_id);
+  assert.notEqual(configChanged.snapshot_id, baseline.snapshot_id);
+  assert.equal(irChanged.source_manifest_digest, baseline.source_manifest_digest);
+});
+
 test("failed incremental build never publishes a partial Ready state", () => {
   const first = indexer().buildFull(source(baseFiles)).state;
   const broken = source(baseFiles);

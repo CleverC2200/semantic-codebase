@@ -18,6 +18,8 @@ import { IndexBuildError } from "./types.js";
 export class RepositoryIndexer {
   private readonly adaptersByLanguage: Map<Language, SyntaxAdapter>;
   private readonly manifests: SyntaxAdapterManifest[];
+  private readonly canonicalIrVersion: string;
+  private readonly indexConfigDigest: string;
 
   constructor(options: IndexOptions) {
     this.adaptersByLanguage = new Map();
@@ -33,6 +35,8 @@ export class RepositoryIndexer {
     this.manifests = [...options.adapters.map((adapter) => adapter.manifest)].sort((left, right) =>
       left.language.localeCompare(right.language),
     );
+    this.canonicalIrVersion = options.canonical_ir_version ?? "1";
+    this.indexConfigDigest = canonicalHash(options.index_config ?? {});
   }
 
   buildFull(source: RepositorySource): IndexBuildResult {
@@ -116,13 +120,23 @@ export class RepositoryIndexer {
       source_digest: file.source_digest,
       byte_length: file.source_bytes.byteLength,
     }));
+    const source_manifest_digest = canonicalHash(manifestFiles);
     const snapshot_id = canonicalHash({
       type: "snapshot",
       repository_id: repositoryId,
-      files: manifestFiles,
+      source_manifest_digest,
+      canonical_ir_version: this.canonicalIrVersion,
       adapter_profile_digest,
+      index_config_digest: this.indexConfigDigest,
     });
-    return { adapter_profile_digest, snapshot_id, manifestFiles };
+    return {
+      adapter_profile_digest,
+      canonical_ir_version: this.canonicalIrVersion,
+      index_config_digest: this.indexConfigDigest,
+      source_manifest_digest,
+      snapshot_id,
+      manifestFiles,
+    };
   }
 
   private extractFile(
@@ -184,6 +198,9 @@ export class RepositoryIndexer {
     const state: IndexState = {
       repository_id: repositoryId,
       snapshot_id: identity.snapshot_id,
+      source_manifest_digest: identity.source_manifest_digest,
+      canonical_ir_version: identity.canonical_ir_version,
+      index_config_digest: identity.index_config_digest,
       adapter_profile_digest: identity.adapter_profile_digest,
       adapter_manifests: this.manifests,
       manifest,

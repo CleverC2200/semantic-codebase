@@ -22,6 +22,9 @@ export interface RepositorySource {
 export interface IndexState {
   repository_id: string;
   snapshot_id: string;
+  source_manifest_digest: string;
+  canonical_ir_version: string;
+  index_config_digest: string;
   adapter_profile_digest: string;
   adapter_manifests: SyntaxAdapterManifest[];
   manifest: RepositoryManifest;
@@ -45,6 +48,8 @@ export interface IndexBuildResult {
 
 export interface IndexOptions {
   adapters: SyntaxAdapter[];
+  canonical_ir_version?: string;
+  index_config?: unknown;
 }
 
 export class IndexBuildError extends Error {
