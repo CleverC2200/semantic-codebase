@@ -95,6 +95,32 @@ export interface TraverseData {
   relations: CanonicalRelation[];
 }
 
+export interface PathsInput {
+  repository_id: string;
+  snapshot: "current_ready" | string;
+  start_definition_key: string;
+  end_definition_key: string;
+  direction?: TraversalDirection;
+  relation_kinds?: RelationKind[];
+  max_depth?: number;
+  max_nodes?: number;
+  max_paths?: number;
+  timeout_ms?: number;
+  observed_manifest_digest?: string;
+  require_fresh?: boolean;
+}
+
+export interface GraphPath {
+  nodes: CanonicalDefinition[];
+  relations: CanonicalRelation[];
+}
+
+export interface PathsData {
+  start_definition_key: string;
+  end_definition_key: string;
+  paths: GraphPath[];
+}
+
 export interface GraphQueryStore extends DefinitionQueryStore {
   readAdjacentRelations(
     repositoryId: string,

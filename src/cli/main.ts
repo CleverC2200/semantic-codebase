@@ -106,6 +106,19 @@ function execute(
       ...(numberOption(parsed, "timeout-ms") !== undefined ? { timeout_ms: numberOption(parsed, "timeout-ms") } : {}),
     });
   }
+  if (command === "graph paths") {
+    return new GraphQueryService(store).findPaths({
+      ...scope,
+      start_definition_key: requiredOption(parsed, "start-definition-key"),
+      end_definition_key: requiredOption(parsed, "end-definition-key"),
+      ...(parsed.options.get("direction") ? { direction: parsed.options.get("direction") as "outgoing" | "incoming" | "both" } : {}),
+      ...(relationKindsOption(parsed) ? { relation_kinds: relationKindsOption(parsed) } : {}),
+      ...(numberOption(parsed, "max-depth") !== undefined ? { max_depth: numberOption(parsed, "max-depth") } : {}),
+      ...(numberOption(parsed, "max-nodes") !== undefined ? { max_nodes: numberOption(parsed, "max-nodes") } : {}),
+      ...(numberOption(parsed, "max-paths") !== undefined ? { max_paths: numberOption(parsed, "max-paths") } : {}),
+      ...(numberOption(parsed, "timeout-ms") !== undefined ? { timeout_ms: numberOption(parsed, "timeout-ms") } : {}),
+    });
+  }
   throw new QueryError("INVALID_ARGUMENT", `Unknown command: ${command || "<empty>"}`);
 }
 

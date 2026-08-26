@@ -158,3 +158,54 @@ test("graph traverse performs deterministic budgeted BFS over Definition relatio
   assert.equal(nodeLimited.output.completeness.reason, "max_nodes");
   assert.equal(nodeLimited.output.data.nodes.length, 1);
 });
+
+test("graph paths returns ordered shortest simple paths with explicit path budgets", async () => {
+  const { root, store } = fixture();
+  writeFileSync(
+    path.join(root, "src", "main.ts"),
+    [
+      "export function targetNode() {}",
+      "export function leftNode() { targetNode(); }",
+      "export function rightNode() { targetNode(); }",
+      "export function originNode() { leftNode(); rightNode(); }",
+    ].join("\n"),
+  );
+  await invoke(["index", "--repo", root, "--store", store]);
+  const origin = (await invoke([
+    "definitions", "find", "--repo", root, "--store", store, "--query", "originNode",
+  ])).output.data.definitions[0];
+  const target = (await invoke([
+    "definitions", "find", "--repo", root, "--store", store, "--query", "targetNode",
+  ])).output.data.definitions[0];
+  assert.ok(origin);
+  assert.ok(target);
+  const arguments_ = [
+    "graph", "paths", "--repo", root, "--store", store,
+    "--start-definition-key", origin.definition_key,
+    "--end-definition-key", target.definition_key,
+    "--relation-kinds", "CALLS",
+  ];
+
+  const result = await invoke(arguments_);
+  assert.equal(result.code, 0);
+  assert.equal(result.output.completeness.complete, true);
+  assert.deepEqual(
+    result.output.data.paths
+      .map((path_: any) => path_.nodes.map((node: any) => node.name).join(" -> "))
+      .sort(),
+    [
+      "originNode -> leftNode -> targetNode",
+      "originNode -> rightNode -> targetNode",
+    ],
+  );
+  assert.ok(result.output.data.paths.every((path_: any) =>
+    new Set(path_.nodes.map((node: any) => node.definition_key)).size === path_.nodes.length,
+  ));
+
+  const limited = await invoke([...arguments_, "--max-paths", "1"]);
+  assert.equal(limited.output.data.paths.length, 1);
+  assert.equal(limited.output.completeness.reason, "max_paths");
+  const shallow = await invoke([...arguments_, "--max-depth", "1"]);
+  assert.equal(shallow.output.data.paths.length, 0);
+  assert.equal(shallow.output.completeness.reason, "max_depth");
+});

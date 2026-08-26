@@ -3,6 +3,9 @@ import { performance } from "node:perf_hooks";
 import type { CanonicalDefinition, CanonicalRelation } from "../canonicalization/types.js";
 import type {
   GraphQueryStore,
+  GraphPath,
+  PathsData,
+  PathsInput,
   QueryResult,
   TraverseData,
   TraverseInput,
@@ -16,6 +19,8 @@ const DEFAULT_MAX_NODES = 500;
 const MAX_NODES = 5_000;
 const DEFAULT_TIMEOUT_MS = 2_000;
 const MAX_TIMEOUT_MS = 10_000;
+const DEFAULT_MAX_PATHS = 20;
+const MAX_PATHS = 100;
 
 interface Scope {
   repository_id: string;
@@ -126,9 +131,142 @@ export class GraphQueryService {
       [...nodes.flatMap((node) => node.definition.evidence_ids), ...edges.flatMap((edge) => edge.evidence_ids)],
     );
   }
+
+  findPaths(input: PathsInput): QueryResult<PathsData> {
+    if (!input.start_definition_key || !input.end_definition_key) {
+      throw new QueryError("INVALID_ARGUMENT", "start_definition_key and end_definition_key are required");
+    }
+    const direction = input.direction ?? "outgoing";
+    if (!["outgoing", "incoming", "both"].includes(direction)) {
+      throw new QueryError("INVALID_ARGUMENT", `Invalid traversal direction: ${direction}`);
+    }
+    const maxDepth = bounded(input.max_depth ?? DEFAULT_MAX_DEPTH, 0, MAX_DEPTH, "max_depth");
+    const maxNodes = bounded(input.max_nodes ?? DEFAULT_MAX_NODES, 1, MAX_NODES, "max_nodes");
+    const maxPaths = bounded(input.max_paths ?? DEFAULT_MAX_PATHS, 1, MAX_PATHS, "max_paths");
+    const timeoutMs = bounded(input.timeout_ms ?? DEFAULT_TIMEOUT_MS, 1, MAX_TIMEOUT_MS, "timeout_ms");
+    const relationKinds = [...new Set(input.relation_kinds ?? [])].sort();
+    const scope = resolveScope(this.store, input);
+    const start = this.store.readDefinition(input.repository_id, scope.snapshot_id, input.start_definition_key);
+    const end = this.store.readDefinition(input.repository_id, scope.snapshot_id, input.end_definition_key);
+    if (!start || !end) {
+      return makeResult(scope, {
+        start_definition_key: input.start_definition_key,
+        end_definition_key: input.end_definition_key,
+        paths: [],
+      }, null, { max_depth: 0, max_nodes: 0, max_paths: 0, timeout_ms: 0 }, []);
+    }
+    if (start.definition_key === end.definition_key) {
+      return makeResult(scope, {
+        start_definition_key: start.definition_key,
+        end_definition_key: end.definition_key,
+        paths: [{ nodes: [start], relations: [] }],
+      }, null, { max_depth: 0, max_nodes: 1, max_paths: 1, timeout_ms: 0 }, start.evidence_ids);
+    }
+
+    interface PendingPath {
+      definitions: CanonicalDefinition[];
+      relations: CanonicalRelation[];
+    }
+    const started = performance.now();
+    const queue: PendingPath[] = [{ definitions: [start], relations: [] }];
+    const paths: GraphPath[] = [];
+    let exploredNodes = 1;
+    let truncationReason: string | null = null;
+
+    while (queue.length > 0) {
+      if (performance.now() - started >= timeoutMs) {
+        truncationReason = "timeout_ms";
+        break;
+      }
+      const current = queue.shift()!;
+      const tail = current.definitions.at(-1)!;
+      if (current.relations.length >= maxDepth) {
+        const probe = this.store.readAdjacentRelations(
+          input.repository_id,
+          scope.snapshot_id,
+          [tail.definition_key],
+          direction,
+          relationKinds,
+        );
+        const visited = new Set(current.definitions.map((definition) => definition.definition_key));
+        if (probe.some((relation) =>
+          neighboringDefinitions(relation, [tail.definition_key], direction).some((key) => !visited.has(key)),
+        )) {
+          truncationReason ??= "max_depth";
+        }
+        continue;
+      }
+      const adjacent = this.store.readAdjacentRelations(
+        input.repository_id,
+        scope.snapshot_id,
+        [tail.definition_key],
+        direction,
+        relationKinds,
+      );
+      const visited = new Set(current.definitions.map((definition) => definition.definition_key));
+      for (const relation of adjacent) {
+        for (const neighborKey of neighboringDefinitions(relation, [tail.definition_key], direction)) {
+          if (visited.has(neighborKey)) continue;
+          if (exploredNodes >= maxNodes) {
+            truncationReason = "max_nodes";
+            break;
+          }
+          const definition = this.store.readDefinition(input.repository_id, scope.snapshot_id, neighborKey);
+          if (!definition) continue;
+          exploredNodes += 1;
+          const next: PendingPath = {
+            definitions: [...current.definitions, definition],
+            relations: [...current.relations, relation],
+          };
+          if (neighborKey === end.definition_key) {
+            paths.push({ nodes: next.definitions, relations: next.relations });
+            if (paths.length >= maxPaths) {
+              truncationReason = "max_paths";
+              break;
+            }
+          } else {
+            queue.push(next);
+          }
+        }
+        if (["max_nodes", "max_paths"].includes(truncationReason ?? "")) break;
+      }
+      if (["max_nodes", "max_paths"].includes(truncationReason ?? "")) break;
+      queue.sort(comparePendingPaths);
+    }
+
+    const ordered = paths.sort((left, right) =>
+      left.relations.length - right.relations.length ||
+      relationSequence(left.relations).localeCompare(relationSequence(right.relations)),
+    );
+    return makeResult(
+      scope,
+      {
+        start_definition_key: start.definition_key,
+        end_definition_key: end.definition_key,
+        paths: ordered,
+      },
+      truncationReason,
+      {
+        max_depth: ordered.reduce((maximum, path) => Math.max(maximum, path.relations.length), 0),
+        max_nodes: exploredNodes,
+        max_paths: ordered.length,
+        timeout_ms: Math.ceil(performance.now() - started),
+      },
+      ordered.flatMap((path) => [
+        ...path.nodes.flatMap((definition) => definition.evidence_ids),
+        ...path.relations.flatMap((relation) => relation.evidence_ids),
+      ]),
+    );
+  }
 }
 
-function resolveScope(store: GraphQueryStore, input: TraverseInput): Scope {
+function resolveScope(
+  store: GraphQueryStore,
+  input: Pick<
+    TraverseInput | PathsInput,
+    "repository_id" | "snapshot" | "observed_manifest_digest" | "require_fresh"
+  >,
+): Scope {
   if (!input.repository_id) throw new QueryError("INVALID_ARGUMENT", "repository_id is required");
   const snapshot = store.resolveReadySnapshot(input.repository_id, input.snapshot);
   if (!snapshot) {
@@ -150,6 +288,18 @@ function resolveScope(store: GraphQueryStore, input: TraverseInput): Scope {
     freshness,
     coverage: snapshot.coverage,
   };
+}
+
+function comparePendingPaths(
+  left: { relations: CanonicalRelation[] },
+  right: { relations: CanonicalRelation[] },
+): number {
+  return left.relations.length - right.relations.length ||
+    relationSequence(left.relations).localeCompare(relationSequence(right.relations));
+}
+
+function relationSequence(relations: CanonicalRelation[]): string {
+  return relations.map((relation) => relation.relation_key).join("\0");
 }
 
 function neighboringDefinitions(
