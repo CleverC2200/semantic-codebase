@@ -152,6 +152,7 @@ test("canonicalizer rejects stale and duplicate Candidate resolutions", () => {
 
 test("semantic invariant gate rejects the historical EXPORTS self-edge", () => {
   const repository = fixture();
+  const resolution = new DeterministicResolver().resolve(repository);
   const exportCandidate = repository.slices
     .flatMap((slice) => slice.relation_candidates)
     .find((candidate) => candidate.kind === "EXPORTS");
@@ -161,13 +162,29 @@ test("semantic invariant gate rejects the historical EXPORTS self-edge", () => {
   assert.ok(exportCandidate);
   assert.ok(exportedDefinition);
   exportCandidate.source_local_ref = { kind: "definition", local_id: exportedDefinition.local_id };
-  const resolution = new DeterministicResolver().resolve(repository);
   const graph = new SnapshotCanonicalizer().canonicalize({ repository, resolution });
 
   assert.equal(graph.coverage.status, "failed");
   assert.ok(graph.diagnostics.some((diagnostic) => diagnostic.code === "forbidden_relation_self_edge"));
   assert.ok(!graph.relations.some((relation) =>
     relation.kind === "EXPORTS" && relation.candidate_local_ids.includes(exportCandidate.local_id),
+  ));
+});
+
+test("canonicalizer rejects unregistered Resolver derivations", () => {
+  const repository = fixture();
+  const resolution = new DeterministicResolver().resolve(repository);
+  const firstResolved = resolution.resolved_relations[0];
+  assert.ok(firstResolved);
+  firstResolved.derivation = ["forged_rule"];
+  const graph = new SnapshotCanonicalizer().canonicalize({ repository, resolution });
+
+  assert.equal(graph.coverage.status, "failed");
+  assert.ok(graph.diagnostics.some((diagnostic) =>
+    diagnostic.code === "unregistered_resolution_derivation",
+  ));
+  assert.ok(!graph.relations.some((relation) =>
+    relation.candidate_local_ids.includes(firstResolved.candidate_local_id),
   ));
 });
 

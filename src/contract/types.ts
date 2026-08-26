@@ -71,7 +71,7 @@ export interface ExactRelationDraft {
 }
 
 export type TargetHint =
-  | { kind: "name"; name: string; qualifier?: string }
+  | { kind: "name"; name: string; qualifier?: string; alias?: string }
   | { kind: "member"; receiver_text: string; member: string }
   | {
       kind: "module";

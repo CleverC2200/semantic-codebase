@@ -40,6 +40,26 @@ interface CanonicalizationState {
   conflictedDefinitionRefs: Set<string>;
 }
 
+const REGISTERED_DERIVATIONS = new Set([
+  "container_unique_member",
+  "explicit_import_alias",
+  "explicit_namespace_alias",
+  "lexical_class_receiver",
+  "manifest_unique_module_path",
+  "named_re_export_binding",
+  "namespace_re_export_binding",
+  "python_module_level_binding",
+  "same_file_export_binding",
+  "same_file_unique_class",
+  "same_file_unique_name",
+  "same_file_unique_type",
+  "target_export_binding",
+  "target_file_unique_name",
+  "target_file_unique_type",
+  "target_re_export_binding",
+  "wildcard_re_export_binding",
+]);
+
 export class SnapshotCanonicalizer implements Canonicalizer {
   canonicalize(input: CanonicalizationInput): CanonicalGraph {
     const diagnostics = validateTopLevel(input);
@@ -320,6 +340,18 @@ function canonicalizeRelations(state: CanonicalizationState): CanonicalRelation[
         severity: "error",
         file_path: located.file_path,
         message: "A Candidate may produce at most one resolved relation",
+      });
+      continue;
+    }
+    if (
+      resolved.derivation.length === 0 ||
+      resolved.derivation.some((rule) => !REGISTERED_DERIVATIONS.has(rule))
+    ) {
+      state.diagnostics.push({
+        code: "unregistered_resolution_derivation",
+        severity: "error",
+        file_path: located.file_path,
+        message: "Resolved relation contains an empty or unregistered derivation rule",
       });
       continue;
     }

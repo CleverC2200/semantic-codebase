@@ -43,7 +43,7 @@ test("TypeScript candidates preserve aliases, calls and heritage without target 
     { kind: "IMPORTS", target_hint: { kind: "module", specifier: "./dep", imported_name: "foo", alias: "local" } },
     { kind: "IMPORTS", target_hint: { kind: "module", specifier: "./dep", imported_name: "bar" } },
     { kind: "IMPORTS", target_hint: { kind: "module", specifier: "pkg", imported_name: "*", alias: "ns" } },
-    { kind: "EXPORTS", target_hint: { kind: "name", name: "local", qualifier: "out" } },
+    { kind: "EXPORTS", target_hint: { kind: "name", name: "local", alias: "out" } },
     { kind: "EXPORTS", target_hint: { kind: "module", specifier: "./other", imported_name: "thing", alias: "alias" } },
     { kind: "EXPORTS", target_hint: { kind: "name", name: "C" } },
     { kind: "INHERITS", target_hint: { kind: "name", name: "Base" } },
@@ -59,6 +59,26 @@ test("TypeScript candidates preserve aliases, calls and heritage without target 
   assert.equal(slice.coverage.unresolved_candidate_count, candidates.length);
   assert.equal(slice.evidence.length, slice.definitions.length + candidates.length);
   assert.equal(new Set(Array.from({ length: 3 }, () => canonicalHash(extract(new TypeScriptTreeSitterAdapter(), source, "typescript", "src/main.ts")))).size, 1);
+});
+
+test("TypeScript export candidates preserve default, wildcard and namespace visibility", () => {
+  const source = [
+    "export default function main() {}",
+    'export * from "./all";',
+    'export * as ns from "./namespace";',
+  ].join("\n");
+  const slice = extract(new TypeScriptTreeSitterAdapter(), source, "typescript", "src/main.ts");
+
+  assert.deepEqual(
+    slice.relation_candidates
+      .filter((candidate) => candidate.kind === "EXPORTS")
+      .map((candidate) => candidate.target_hint),
+    [
+      { kind: "name", name: "main", alias: "default" },
+      { kind: "module", specifier: "./all", imported_name: "*" },
+      { kind: "module", specifier: "./namespace", imported_name: "*", alias: "ns" },
+    ],
+  );
 });
 
 test("Candidate identity includes its repository-relative file path", () => {

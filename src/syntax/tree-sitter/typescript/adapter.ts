@@ -140,17 +140,34 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
                 imported_name: name.text,
                 ...(alias ? { alias: alias.text } : {}),
               }
-            : { kind: "name" as const, name: name.text, ...(alias ? { qualifier: alias.text } : {}) };
+            : { kind: "name" as const, name: name.text, ...(alias ? { alias: alias.text } : {}) };
           return [this.makeCandidate(context, "EXPORTS", hint, item, sourceReference)];
         });
     }
+    if (specifier) {
+      const namespaceExport = node.namedChildren.find((child) => child.type === "namespace_export");
+      const alias = namespaceExport?.namedChildren.find((child) => child.type === "identifier")?.text;
+      return [this.makeCandidate(
+        context,
+        "EXPORTS",
+        {
+          kind: "module",
+          specifier,
+          imported_name: "*",
+          ...(alias ? { alias } : {}),
+        },
+        namespaceExport ?? source!,
+        sourceReference,
+      )];
+    }
     const declaration = node.childForFieldName("declaration");
     const name = declaration?.childForFieldName("name") ?? declaration?.descendantsOfType(["identifier", "type_identifier"])[0];
+    const isDefault = node.children.some((child) => child.type === "default");
     return name
       ? [this.makeCandidate(
           context,
           "EXPORTS",
-          { kind: "name", name: name.text },
+          { kind: "name", name: name.text, ...(isDefault ? { alias: "default" } : {}) },
           name,
           sourceReference,
         )]

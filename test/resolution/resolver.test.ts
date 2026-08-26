@@ -110,6 +110,69 @@ test("zero targets, duplicate names and ambiguous module paths remain unresolved
   assert.ok(!result.resolved_relations.some((relation) => relation.target.file_path.includes("missing")));
 });
 
+test("TypeScript imports require exported default, alias, wildcard and re-export bindings", () => {
+  const repository = view([
+    [
+      "src/dep.ts",
+      [
+        "export function publicFn() {}",
+        "function hidden() {}",
+        "export default class DefaultThing { static make() {} }",
+      ].join("\n"),
+    ],
+    [
+      "src/barrel.ts",
+      [
+        'export { publicFn as renamed } from "./dep";',
+        'export * from "./dep";',
+        'export * as ns from "./dep";',
+      ].join("\n"),
+    ],
+    [
+      "src/main.ts",
+      [
+        'import DefaultThing from "./dep";',
+        'import { renamed, publicFn, hidden, ns } from "./barrel";',
+        "renamed(); publicFn(); hidden(); ns.publicFn(); DefaultThing.make();",
+      ].join("\n"),
+    ],
+  ]);
+  const result = new DeterministicResolver().resolve(repository);
+  const resolvedIds = new Set(result.resolved_relations.map((relation) => relation.candidate_local_id));
+  const candidates = repository.slices.flatMap((item) => item.relation_candidates);
+  const matching = (kind: string, name: string) => candidates.filter((candidate) => {
+    if (candidate.kind !== kind) return false;
+    const hint = candidate.target_hint;
+    return (hint.kind === "name" && hint.name === name) ||
+      (hint.kind === "member" && hint.member === name) ||
+      (hint.kind === "module" && (hint.alias === name || hint.imported_name === name));
+  });
+
+  for (const name of ["DefaultThing", "renamed", "publicFn", "ns"]) {
+    assert.ok(matching("IMPORTS", name).every((candidate) => resolvedIds.has(candidate.local_id)));
+  }
+  assert.ok(matching("CALLS", "publicFn").every((candidate) => resolvedIds.has(candidate.local_id)));
+  assert.ok(matching("CALLS", "make").every((candidate) => resolvedIds.has(candidate.local_id)));
+  assert.ok(matching("IMPORTS", "hidden").every((candidate) => !resolvedIds.has(candidate.local_id)));
+  assert.ok(matching("CALLS", "hidden").every((candidate) => !resolvedIds.has(candidate.local_id)));
+});
+
+test("circular wildcard re-exports converge to the same visible bindings", () => {
+  const repository = view([
+    ["src/a.ts", 'export function A() {}\nexport * from "./b";\n'],
+    ["src/b.ts", 'export function B() {}\nexport * from "./a";\n'],
+    ["src/use.ts", 'import { A, B } from "./b";\nA(); B();\n'],
+  ]);
+  const result = new DeterministicResolver().resolve(repository);
+  const resolvedIds = new Set(result.resolved_relations.map((relation) => relation.candidate_local_id));
+  const userCandidates = repository.slices
+    .find((item) => item.file.relative_path === "src/use.ts")!
+    .relation_candidates;
+
+  assert.equal(userCandidates.length, 4);
+  assert.ok(userCandidates.every((candidate) => resolvedIds.has(candidate.local_id)));
+});
+
 test("deleted manifest file invalidates a stale frozen view", () => {
   const repository = view([["src/a.ts", "export function a() {}\n"]]);
   repository.manifest.files = [];

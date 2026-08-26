@@ -5,6 +5,7 @@ import type {
   DefinitionDraft,
   Diagnostic,
   RelationCandidate,
+  SubjectLocalRef,
   SyntaxSlice,
   TargetHint,
 } from "../contract/types.js";
@@ -27,10 +28,18 @@ interface ImportBinding {
   target_definition?: LocatedDefinition;
 }
 
+interface ExportBinding {
+  exported_name: string;
+  target_file?: string;
+  target_definition?: LocatedDefinition;
+  derivation: string[];
+}
+
 interface ResolutionContext {
   view: FrozenRepositoryView;
   slicesByPath: Map<string, SyntaxSlice>;
   definitions: LocatedDefinition[];
+  exportBindings: Map<string, ExportBinding[]>;
   importBindings: Map<string, ImportBinding[]>;
 }
 
@@ -72,8 +81,10 @@ export class DeterministicResolver implements Resolver {
       view,
       slicesByPath,
       definitions,
+      exportBindings: new Map(),
       importBindings: new Map(),
     };
+    context.exportBindings = buildExportBindings(context);
     context.importBindings = buildImportBindings(context);
 
     const candidates = view.slices
@@ -179,9 +190,10 @@ function buildImportBindings(context: ResolutionContext): Map<string, ImportBind
       const localName = hint.alias ?? hint.imported_name ?? moduleLocalName(hint.specifier);
       const binding: ImportBinding = { local_name: localName };
       if (targetFile) binding.target_file = targetFile;
-      if (targetFile && hint.imported_name && !["*", "default"].includes(hint.imported_name)) {
-        const target = uniqueDefinition(context, targetFile, hint.imported_name);
-        if (target) binding.target_definition = target;
+      if (targetFile && hint.imported_name && hint.imported_name !== "*") {
+        const target = importableBinding(context, targetFile, hint.imported_name);
+        if (target?.target_definition) binding.target_definition = target.target_definition;
+        if (target?.target_file) binding.target_file = target.target_file;
       }
       fileBindings.push(binding);
     }
@@ -190,16 +202,102 @@ function buildImportBindings(context: ResolutionContext): Map<string, ImportBind
   return bindings;
 }
 
+function buildExportBindings(context: ResolutionContext): Map<string, ExportBinding[]> {
+  interface ReExportRule {
+    source_file: string;
+    target_file: string;
+    imported_name: string;
+    alias?: string;
+  }
+  const direct = new Map<string, ExportBinding[]>();
+  const rules: ReExportRule[] = [];
+  for (const [filePath, slice] of context.slicesByPath) {
+    if (slice.file.language !== "typescript") continue;
+    const bindings: ExportBinding[] = [];
+    for (const candidate of slice.relation_candidates) {
+      if (candidate.kind !== "EXPORTS" || candidate.source_local_ref.kind !== "source_file") continue;
+      const hint = candidate.target_hint;
+      if (hint.kind === "name") {
+        const target = uniqueDefinitionForSource(context, filePath, candidate.source_local_ref, hint.name);
+        if (target) {
+          bindings.push({
+            exported_name: hint.alias ?? hint.name,
+            target_definition: target,
+            derivation: ["same_file_export_binding"],
+          });
+        }
+        continue;
+      }
+      if (hint.kind !== "module" || !hint.imported_name) continue;
+      const targetFile = resolveModulePath(filePath, slice.file.language, hint.specifier, context);
+      if (!targetFile) continue;
+      if (hint.imported_name === "*" && hint.alias) {
+        bindings.push({
+          exported_name: hint.alias,
+          target_file: targetFile,
+          derivation: ["manifest_unique_module_path", "namespace_re_export_binding"],
+        });
+      } else {
+        rules.push({
+          source_file: filePath,
+          target_file: targetFile,
+          imported_name: hint.imported_name,
+          ...(hint.alias ? { alias: hint.alias } : {}),
+        });
+      }
+    }
+    direct.set(filePath, uniqueBindings(bindings));
+  }
+
+  let current = new Map([...direct].map(([filePath, bindings]) => [filePath, [...bindings]]));
+  const maxPasses = Math.max(1, direct.size + rules.length + 1);
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    const next = new Map([...direct].map(([filePath, bindings]) => [filePath, [...bindings]]));
+    for (const rule of rules) {
+      const targetBindings = current.get(rule.target_file) ?? [];
+      const additions = rule.imported_name === "*"
+        ? targetBindings
+            .filter((binding) => binding.exported_name !== "default")
+            .map((binding) => ({
+              ...binding,
+              derivation: ["manifest_unique_module_path", "wildcard_re_export_binding", ...binding.derivation],
+            }))
+        : (() => {
+            const target = uniqueExportBinding(targetBindings, rule.imported_name);
+            return target
+              ? [{
+                  ...target,
+                  exported_name: rule.alias ?? rule.imported_name,
+                  derivation: ["manifest_unique_module_path", "named_re_export_binding", ...target.derivation],
+                }]
+              : [];
+          })();
+      next.set(rule.source_file, uniqueBindings([...(next.get(rule.source_file) ?? []), ...additions]));
+    }
+    if (exportBindingMapsEqual(current, next)) return next;
+    current = next;
+  }
+  return current;
+}
+
 function resolveCandidate(
   location: CandidateLocation,
   context: ResolutionContext,
 ): TargetResolution | null {
   const { candidate, file_path, slice } = location;
-  if (["IMPORTS", "EXPORTS"].includes(candidate.kind) && candidate.target_hint.kind === "module") {
-    return resolveModuleHint(file_path, slice.file.language, candidate.target_hint, context);
+  if (
+    (candidate.kind === "IMPORTS" || candidate.kind === "EXPORTS") &&
+    candidate.target_hint.kind === "module"
+  ) {
+    return resolveModuleHint(candidate.kind, file_path, slice.file.language, candidate.target_hint, context);
   }
   if (candidate.kind === "EXPORTS" && candidate.target_hint.kind === "name") {
-    const definition = uniqueDefinition(context, file_path, candidate.target_hint.name);
+    const definition = uniqueDefinitionForSource(
+      context,
+      file_path,
+      candidate.source_local_ref,
+      candidate.target_hint.name,
+    );
     return definition
       ? { target: definitionEndpoint(definition), derivation: ["same_file_unique_name"] }
       : null;
@@ -214,6 +312,7 @@ function resolveCandidate(
 }
 
 function resolveModuleHint(
+  relationKind: "IMPORTS" | "EXPORTS",
   sourceFile: string,
   language: SyntaxSlice["file"]["language"],
   hint: Extract<TargetHint, { kind: "module" }>,
@@ -227,12 +326,20 @@ function resolveModuleHint(
       derivation: ["manifest_unique_module_path"],
     };
   }
-  if (hint.imported_name === "default") return null;
-  const definition = uniqueDefinition(context, targetFile, hint.imported_name);
-  return definition
+  const binding = importableBinding(context, targetFile, hint.imported_name);
+  const endpoint = binding?.target_definition
+    ? definitionEndpoint(binding.target_definition)
+    : binding?.target_file
+      ? { kind: "source_file" as const, file_path: binding.target_file }
+      : null;
+  return endpoint
     ? {
-        target: definitionEndpoint(definition),
-        derivation: ["manifest_unique_module_path", "target_file_unique_name"],
+        target: endpoint,
+        derivation: [
+          "manifest_unique_module_path",
+          relationKind === "IMPORTS" ? "target_export_binding" : "target_re_export_binding",
+          ...(binding?.derivation ?? []),
+        ],
       }
     : null;
 }
@@ -263,8 +370,24 @@ function resolveCall(location: CandidateLocation, context: ResolutionContext): T
       : null;
   }
   const binding = uniqueBinding(context, location.file_path, hint.receiver_text);
+  if (binding?.target_definition) {
+    const targetSlice = context.slicesByPath.get(binding.target_definition.file_path);
+    const member = targetSlice
+      ? uniqueDefinitionInContainer(
+          targetSlice,
+          binding.target_definition.definition.local_id,
+          hint.member,
+        )
+      : null;
+    return member
+      ? {
+          target: definitionEndpoint({ file_path: binding.target_definition.file_path, definition: member }),
+          derivation: ["explicit_import_alias", "container_unique_member"],
+        }
+      : null;
+  }
   if (binding?.target_file) {
-    const definition = uniqueDefinition(context, binding.target_file, hint.member);
+    const definition = importableBinding(context, binding.target_file, hint.member)?.target_definition;
     return definition
       ? {
           target: definitionEndpoint(definition),
@@ -295,8 +418,11 @@ function resolveNamedType(
 ): TargetResolution | null {
   if (hint.qualifier) {
     const binding = uniqueBinding(context, sourceFile, hint.qualifier);
-    const target = binding?.target_file
-      ? uniqueDefinition(context, binding.target_file, hint.name, ["class", "interface"])
+    const exported = binding?.target_file
+      ? importableBinding(context, binding.target_file, hint.name)
+      : null;
+    const target = exported?.target_definition && ["class", "interface"].includes(exported.target_definition.definition.kind)
+      ? exported.target_definition
       : null;
     return target
       ? { target: definitionEndpoint(target), derivation: ["explicit_namespace_alias", "target_file_unique_type"] }
@@ -370,6 +496,82 @@ function uniqueDefinition(
       (!kinds || kinds.includes(located.definition.kind)),
   );
   return matches.length === 1 ? matches[0] ?? null : null;
+}
+
+function uniqueDefinitionForSource(
+  context: ResolutionContext,
+  filePath: string,
+  source: SubjectLocalRef,
+  name: string,
+): LocatedDefinition | null {
+  const matches = context.definitions.filter((located) =>
+    located.file_path === filePath &&
+    located.definition.name === name &&
+    located.definition.container_local_id === (source.kind === "source_file" ? null : source.local_id),
+  );
+  return matches.length === 1 ? matches[0] ?? null : null;
+}
+
+function importableBinding(
+  context: ResolutionContext,
+  targetFile: string,
+  exportedName: string,
+): ExportBinding | null {
+  const slice = context.slicesByPath.get(targetFile);
+  if (!slice) return null;
+  if (slice.file.language === "python") {
+    const target = context.definitions.filter((located) =>
+      located.file_path === targetFile &&
+      located.definition.container_local_id === null &&
+      located.definition.name === exportedName,
+    );
+    return target.length === 1
+      ? {
+          exported_name: exportedName,
+          target_definition: target[0],
+          derivation: ["python_module_level_binding"],
+        }
+      : null;
+  }
+  return uniqueExportBinding(context.exportBindings.get(targetFile) ?? [], exportedName);
+}
+
+function uniqueExportBinding(bindings: ExportBinding[], exportedName: string): ExportBinding | null {
+  const matches = bindings.filter((binding) => binding.exported_name === exportedName);
+  return matches.length === 1 ? matches[0] ?? null : null;
+}
+
+function uniqueBindings(bindings: ExportBinding[]): ExportBinding[] {
+  const byIdentity = new Map<string, ExportBinding>();
+  for (const binding of bindings) {
+    byIdentity.set(exportBindingIdentity(binding), binding);
+  }
+  return [...byIdentity.values()].sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right)));
+}
+
+function exportBindingMapsEqual(
+  left: Map<string, ExportBinding[]>,
+  right: Map<string, ExportBinding[]>,
+): boolean {
+  const filePaths = new Set([...left.keys(), ...right.keys()]);
+  return [...filePaths].every((filePath) => {
+    const leftIds = (left.get(filePath) ?? []).map(exportBindingIdentity).sort();
+    const rightIds = (right.get(filePath) ?? []).map(exportBindingIdentity).sort();
+    return canonicalJson(leftIds) === canonicalJson(rightIds);
+  });
+}
+
+function exportBindingIdentity(binding: ExportBinding): string {
+  return canonicalJson({
+    exported_name: binding.exported_name,
+    ...(binding.target_file ? { target_file: binding.target_file } : {}),
+    target_definition: binding.target_definition
+      ? {
+          file_path: binding.target_definition.file_path,
+          local_id: binding.target_definition.definition.local_id,
+        }
+      : null,
+  });
 }
 
 function uniqueBinding(
