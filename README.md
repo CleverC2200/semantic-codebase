@@ -28,6 +28,7 @@ Semantic Codebase/
 
 - [领域词汇与语义约束](CONTEXT.md)
 - [Syntax Extraction Spec](docs/specs/syntax-extraction.md)
+- [Structural Graph Productization Spec](docs/specs/structural-graph-productization.md)
 - [Semantic Codebase 总路线图](.scratch/semantic-codebase/map.md)
 - [开源项目参考与采用状态](.scratch/semantic-codebase/research/open-source-reference-index.md)
 - [早期 V0.1 实施交接](.scratch/semantic-codebase/v01-implementation-handoff.md)
