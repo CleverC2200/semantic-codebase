@@ -8,9 +8,14 @@ import type { RelationKind } from "../contract/types.js";
 import { DefinitionQueryService } from "../query/definition-query.js";
 import { GraphQueryService } from "../query/graph-query.js";
 import { QueryError } from "../query/types.js";
-import { discoverRepository, repositoryManifestSummary } from "../repository/source.js";
+import {
+  discoverRepository,
+  repositoryManifestSummary,
+  RepositorySourceError,
+} from "../repository/source.js";
 import { repositoryStatus } from "../repository/status.js";
 import { SqliteSnapshotStore } from "../store/sqlite-store.js";
+import { SnapshotStoreError } from "../store/types.js";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -170,15 +175,23 @@ export async function callMcpTool(name: string, rawArguments: unknown): Promise<
       store.close();
     }
   } catch (error) {
+    const normalized = normalizeToolError(error);
     const body = {
       schema_version: 1,
-      error: {
-        code: error instanceof QueryError ? error.code : "INTERNAL_QUERY_ERROR",
-        message: error instanceof Error ? error.message : String(error),
-      },
+      error: normalized,
     };
     return { ...success(body), isError: true };
   }
+}
+
+function normalizeToolError(error: unknown): { code: string; message: string } {
+  if (error instanceof QueryError || error instanceof SnapshotStoreError || error instanceof RepositorySourceError) {
+    return { code: error.code, message: error.message };
+  }
+  if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+    return { code: "REPOSITORY_NOT_FOUND", message: "Repository path does not exist" };
+  }
+  return { code: "INTERNAL_QUERY_ERROR", message: error instanceof Error ? error.message : String(error) };
 }
 
 export async function runMcpStdio(): Promise<void> {

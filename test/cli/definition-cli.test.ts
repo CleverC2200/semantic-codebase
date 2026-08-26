@@ -76,6 +76,14 @@ test("CLI uses stable argument errors and exit code 2", async () => {
   assert.equal(result.output.error.code, "INVALID_ARGUMENT");
 });
 
+test("CLI rejects options that do not belong to the selected command", async () => {
+  const { root, store } = fixture();
+  const result = await invoke(["status", "--repo", root, "--store", store, "--query", "ignored"]);
+  assert.equal(result.code, 2);
+  assert.equal(result.output.error.code, "INVALID_ARGUMENT");
+  assert.match(result.output.error.message, /Unknown option.*--query/);
+});
+
 test("status, require_fresh and sync expose Manifest freshness without hiding stale data", async () => {
   const { root, store } = fixture();
   const first = await invoke(["index", "--repo", root, "--store", store]);

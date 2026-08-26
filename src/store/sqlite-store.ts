@@ -53,7 +53,7 @@ export class SqliteSnapshotStore implements SnapshotStore {
         "INSERT INTO repositories(repository_id) VALUES (?) ON CONFLICT(repository_id) DO NOTHING",
       ).run(repositoryId);
       const existing = this.snapshotRow(repositoryId, snapshotId);
-      if (existing && existing.status !== "failed") {
+      if (existing && !["building", "failed"].includes(existing.status)) {
         throw new SnapshotStoreError(
           "SNAPSHOT_IMMUTABLE",
           `Snapshot ${snapshotId} already exists with status ${existing.status}`,

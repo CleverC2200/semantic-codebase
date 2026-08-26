@@ -147,6 +147,18 @@ test("MCP rejects additional arguments as a tool error", async () => {
   assert.equal(result.content[0]!.text, canonicalJson(result.structuredContent));
 });
 
+test("MCP preserves stable repository errors instead of reporting an internal failure", async () => {
+  const { root } = fixture();
+  const missing = path.join(root, "missing-repository");
+  const result = await callMcpTool("semantic_codebase_status", { repo: missing });
+  assert.equal(result.isError, true);
+  assert.equal((result.structuredContent as any).error.code, "REPOSITORY_NOT_FOUND");
+  assert.equal(
+    (result.structuredContent as any).error.message,
+    "Repository path does not exist",
+  );
+});
+
 function withoutElapsedBudget(value: any): any {
   const cloned = structuredClone(value);
   if (cloned.completeness?.budget_used) delete cloned.completeness.budget_used.timeout_ms;

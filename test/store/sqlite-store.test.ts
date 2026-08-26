@@ -89,6 +89,21 @@ test("failed publication rolls back all new facts and preserves the old Ready po
   database.close();
 });
 
+test("an interrupted building Snapshot can be resumed without weakening Ready immutability", () => {
+  const database = store();
+  const interrupted = state(1);
+  database.beginBuild(interrupted.repository_id, interrupted.snapshot_id);
+
+  assert.doesNotThrow(() => database.beginBuild(interrupted.repository_id, interrupted.snapshot_id));
+  database.publishReady(interrupted);
+  assert.equal(database.getCurrentReady("repo")?.snapshot_id, interrupted.snapshot_id);
+  assert.throws(
+    () => database.beginBuild(interrupted.repository_id, interrupted.snapshot_id),
+    (error: unknown) => error instanceof SnapshotStoreError && error.code === "SNAPSHOT_IMMUTABLE",
+  );
+  database.close();
+});
+
 test("publication guard runs after integrity checks but before the Ready pointer switch", () => {
   const database = store();
   const first = state(1);

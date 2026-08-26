@@ -31,6 +31,7 @@ interface ParsedArguments {
 export async function runCli(argv: string[], io: CliIo = process): Promise<number> {
   try {
     const parsed = parseArguments(argv);
+    validateCommandOptions(parsed);
     const repositoryPath = requiredOption(parsed, "repo");
     const discovered = discoverRepository(repositoryPath, parsed.options.get("store"));
     const store = new SqliteSnapshotStore(discovered.store_path);
@@ -193,6 +194,44 @@ function parseArguments(argv: string[]): ParsedArguments {
     index += 1;
   }
   return { command, options };
+}
+
+function validateCommandOptions(parsed: ParsedArguments): void {
+  const command = parsed.command.join(" ");
+  const common = ["repo", "store"];
+  const queryScope = [...common, "snapshot", "require-fresh"];
+  const allowedByCommand: Record<string, string[]> = {
+    index: common,
+    sync: common,
+    status: common,
+    "definitions find": [...queryScope, "query", "max-results"],
+    "definition get": [...queryScope, "definition-key"],
+    "evidence get": [...queryScope, "evidence-id", "source-bytes"],
+    "graph traverse": [
+      ...queryScope,
+      "start-definition-key",
+      "direction",
+      "relation-kinds",
+      "max-depth",
+      "max-nodes",
+      "timeout-ms",
+    ],
+    "graph paths": [
+      ...queryScope,
+      "start-definition-key",
+      "end-definition-key",
+      "direction",
+      "relation-kinds",
+      "max-depth",
+      "max-nodes",
+      "max-paths",
+      "timeout-ms",
+    ],
+  };
+  const allowed = allowedByCommand[command];
+  if (!allowed) throw new QueryError("INVALID_ARGUMENT", `Unknown command: ${command || "<empty>"}`);
+  const unknown = [...parsed.options.keys()].find((name) => !allowed.includes(name));
+  if (unknown) throw new QueryError("INVALID_ARGUMENT", `Unknown option for ${command}: --${unknown}`);
 }
 
 function requiredOption(parsed: ParsedArguments, name: string): string {
