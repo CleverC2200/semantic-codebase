@@ -22,7 +22,7 @@ interface ResolvedScope {
   repository_id: string;
   snapshot_id: string;
   revision: string | null;
-  freshness: "unknown";
+  freshness: "fresh" | "stale" | "unknown";
   coverage: CanonicalCoverage;
 }
 
@@ -32,7 +32,12 @@ export class DefinitionQueryService {
   findDefinitions(input: DefinitionFindInput): QueryResult<{ definitions: ReturnType<DefinitionQueryStore["findDefinitions"]> }> {
     if (!input.query.trim()) throw new QueryError("INVALID_ARGUMENT", "query must not be empty");
     const maxResults = bounded(input.max_results ?? DEFAULT_MAX_RESULTS, 1, MAX_RESULTS, "max_results");
-    const scope = this.resolveScope(input.repository_id, input.snapshot);
+    const scope = this.resolveScope(
+      input.repository_id,
+      input.snapshot,
+      input.observed_manifest_digest,
+      input.require_fresh,
+    );
     const definitions = this.store.findDefinitions(
       input.repository_id,
       scope.snapshot_id,
@@ -47,7 +52,12 @@ export class DefinitionQueryService {
 
   getDefinition(input: DefinitionGetInput): QueryResult<{ definition: ReturnType<DefinitionQueryStore["readDefinition"]> }> {
     if (!input.definition_key) throw new QueryError("INVALID_ARGUMENT", "definition_key is required");
-    const scope = this.resolveScope(input.repository_id, input.snapshot);
+    const scope = this.resolveScope(
+      input.repository_id,
+      input.snapshot,
+      input.observed_manifest_digest,
+      input.require_fresh,
+    );
     const definition = this.store.readDefinition(input.repository_id, scope.snapshot_id, input.definition_key);
     return result(scope, { definition }, false, { max_results: definition ? 1 : 0 }, definition?.evidence_ids ?? []);
   }
@@ -55,7 +65,12 @@ export class DefinitionQueryService {
   getEvidence(input: EvidenceGetInput): QueryResult<EvidenceData> {
     if (!input.evidence_id) throw new QueryError("INVALID_ARGUMENT", "evidence_id is required");
     const sourceBudget = bounded(input.source_bytes ?? DEFAULT_SOURCE_BYTES, 1, MAX_SOURCE_BYTES, "source_bytes");
-    const scope = this.resolveScope(input.repository_id, input.snapshot);
+    const scope = this.resolveScope(
+      input.repository_id,
+      input.snapshot,
+      input.observed_manifest_digest,
+      input.require_fresh,
+    );
     const evidence = this.store.readEvidence(input.repository_id, scope.snapshot_id, input.evidence_id);
     if (!evidence) {
       throw new QueryError("INVALID_ARGUMENT", `Evidence not found: ${input.evidence_id}`);
@@ -64,7 +79,12 @@ export class DefinitionQueryService {
     return result(scope, { evidence, source }, source.truncated, { source_bytes: source.text ? Buffer.byteLength(source.text) : 0 }, [evidence.evidence_id]);
   }
 
-  private resolveScope(repositoryId: string, selector: "current_ready" | string): ResolvedScope {
+  private resolveScope(
+    repositoryId: string,
+    selector: "current_ready" | string,
+    observedManifestDigest?: string,
+    requireFresh = false,
+  ): ResolvedScope {
     if (!repositoryId) throw new QueryError("INVALID_ARGUMENT", "repository_id is required");
     const snapshot = this.store.resolveReadySnapshot(repositoryId, selector);
     if (!snapshot) {
@@ -73,11 +93,21 @@ export class DefinitionQueryService {
         selector === "current_ready" ? "Repository has no Ready Snapshot" : `Snapshot not found: ${selector}`,
       );
     }
+    const freshness = observedManifestDigest
+      ? observedManifestDigest === snapshot.source_manifest_digest ? "fresh" as const : "stale" as const
+      : "unknown" as const;
+    if (requireFresh && freshness !== "fresh") {
+      throw new QueryError(
+        "STALE_SNAPSHOT",
+        freshness === "stale" ? "Ready Snapshot does not match the observed Manifest" : "Freshness is unknown",
+      );
+    }
     return {
-      ...snapshot,
       repository_id: repositoryId,
+      snapshot_id: snapshot.snapshot_id,
       revision: null,
-      freshness: "unknown" as const,
+      freshness,
+      coverage: snapshot.coverage,
     };
   }
 }

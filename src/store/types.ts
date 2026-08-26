@@ -12,7 +12,7 @@ export interface SnapshotSummary {
 
 export interface SnapshotStore {
   beginBuild(repositoryId: string, snapshotId: string): void;
-  publishReady(state: IndexState): void;
+  publishReady(state: IndexState, options?: { before_pointer?: () => void }): void;
   markFailed(repositoryId: string, snapshotId: string, message: string): void;
   getCurrentReady(repositoryId: string): IndexState | null;
   getSnapshot(repositoryId: string, snapshotId: string): IndexState | null;

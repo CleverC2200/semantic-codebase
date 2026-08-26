@@ -34,12 +34,16 @@ export interface DefinitionFindInput {
   snapshot: "current_ready" | string;
   query: string;
   max_results?: number;
+  observed_manifest_digest?: string;
+  require_fresh?: boolean;
 }
 
 export interface DefinitionGetInput {
   repository_id: string;
   snapshot: "current_ready" | string;
   definition_key: string;
+  observed_manifest_digest?: string;
+  require_fresh?: boolean;
 }
 
 export interface EvidenceGetInput {
@@ -48,6 +52,8 @@ export interface EvidenceGetInput {
   evidence_id: string;
   repository_root: string;
   source_bytes?: number;
+  observed_manifest_digest?: string;
+  require_fresh?: boolean;
 }
 
 export interface EvidenceData {
@@ -58,6 +64,7 @@ export interface EvidenceData {
 export interface DefinitionQueryStore {
   resolveReadySnapshot(repositoryId: string, selector: "current_ready" | string): {
     snapshot_id: string;
+    source_manifest_digest: string;
     coverage: CanonicalCoverage;
   } | null;
   findDefinitions(repositoryId: string, snapshotId: string, query: string, limit: number): CanonicalDefinition[];
@@ -71,6 +78,8 @@ export class QueryError extends Error {
       | "INVALID_ARGUMENT"
       | "NO_READY_SNAPSHOT"
       | "SNAPSHOT_NOT_FOUND"
+      | "STALE_SNAPSHOT"
+      | "INDEX_BUILD_FAILED"
       | "INTERNAL_QUERY_ERROR",
     message: string,
   ) {

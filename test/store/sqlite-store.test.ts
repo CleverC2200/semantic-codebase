@@ -88,3 +88,21 @@ test("failed publication rolls back all new facts and preserves the old Ready po
   assert.equal(database.getSnapshot("repo", corrupted.snapshot_id), null);
   database.close();
 });
+
+test("publication guard runs after integrity checks but before the Ready pointer switch", () => {
+  const database = store();
+  const first = state(1);
+  database.beginBuild(first.repository_id, first.snapshot_id);
+  database.publishReady(first);
+  const second = state(2);
+  database.beginBuild(second.repository_id, second.snapshot_id);
+
+  assert.throws(() => database.publishReady(second, {
+    before_pointer: () => { throw new Error("observed manifest changed"); },
+  }));
+  database.markFailed(second.repository_id, second.snapshot_id, "observed manifest changed");
+
+  assert.equal(database.getCurrentReady("repo")?.snapshot_id, first.snapshot_id);
+  assert.equal(database.getSnapshotSummary("repo", second.snapshot_id)?.status, "failed");
+  database.close();
+});

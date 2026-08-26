@@ -61,7 +61,7 @@ export class SqliteSnapshotStore implements SnapshotStore {
     });
   }
 
-  publishReady(state: IndexState): void {
+  publishReady(state: IndexState, options: { before_pointer?: () => void } = {}): void {
     verifyReadyState(state);
     this.transaction(() => {
       const row = this.snapshotRow(state.repository_id, state.snapshot_id);
@@ -90,6 +90,7 @@ export class SqliteSnapshotStore implements SnapshotStore {
         state.repository_id,
         state.snapshot_id,
       );
+      options.before_pointer?.();
       const prior = this.database.prepare(
         "SELECT snapshot_id FROM repository_ready_pointer WHERE repository_id = ?",
       ).get(state.repository_id) as { snapshot_id: string } | undefined;
@@ -172,7 +173,7 @@ export class SqliteSnapshotStore implements SnapshotStore {
   resolveReadySnapshot(
     repositoryId: string,
     selector: "current_ready" | string,
-  ): { snapshot_id: string; coverage: CanonicalCoverage } | null {
+  ): { snapshot_id: string; source_manifest_digest: string; coverage: CanonicalCoverage } | null {
     const snapshotId = selector === "current_ready"
       ? (this.database.prepare(
           "SELECT snapshot_id FROM repository_ready_pointer WHERE repository_id = ?",
@@ -180,12 +181,22 @@ export class SqliteSnapshotStore implements SnapshotStore {
       : selector;
     if (!snapshotId) return null;
     const row = this.database.prepare(
-      `SELECT s.status, c.coverage_json
+      `SELECT s.status, s.source_manifest_digest, c.coverage_json
        FROM snapshots s JOIN snapshot_coverage c
          ON c.repository_id = s.repository_id AND c.snapshot_id = s.snapshot_id
        WHERE s.repository_id = ? AND s.snapshot_id = ? AND s.status IN ('ready', 'superseded')`,
-    ).get(repositoryId, snapshotId) as { status: SnapshotStatus; coverage_json: string } | undefined;
-    return row ? { snapshot_id: snapshotId, coverage: JSON.parse(row.coverage_json) as CanonicalCoverage } : null;
+    ).get(repositoryId, snapshotId) as {
+      status: SnapshotStatus;
+      source_manifest_digest: string;
+      coverage_json: string;
+    } | undefined;
+    return row
+      ? {
+          snapshot_id: snapshotId,
+          source_manifest_digest: row.source_manifest_digest,
+          coverage: JSON.parse(row.coverage_json) as CanonicalCoverage,
+        }
+      : null;
   }
 
   findDefinitions(

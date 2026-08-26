@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
+import { execFileSync } from "node:child_process";
 
 import { runCli } from "../../src/index.js";
 
@@ -16,8 +17,12 @@ function fixture() {
   roots.push(root);
   mkdirSync(path.join(root, "src"));
   mkdirSync(path.join(root, "references"));
+  mkdirSync(path.join(root, "ignored"));
   writeFileSync(path.join(root, "src", "main.ts"), "export function hello() { return '你好'; }\n");
   writeFileSync(path.join(root, "references", "ignored.ts"), "export function ignored() {}\n");
+  writeFileSync(path.join(root, "ignored", "generated.ts"), "export function generated() {}\n");
+  writeFileSync(path.join(root, ".gitignore"), "ignored/\n");
+  execFileSync("git", ["init", "-q"], { cwd: root });
   return { root, store: path.join(root, "outside-store.sqlite") };
 }
 
@@ -69,4 +74,45 @@ test("CLI uses stable argument errors and exit code 2", async () => {
   const result = await invoke(["definitions", "find"]);
   assert.equal(result.code, 2);
   assert.equal(result.output.error.code, "INVALID_ARGUMENT");
+});
+
+test("status, require_fresh and sync expose Manifest freshness without hiding stale data", async () => {
+  const { root, store } = fixture();
+  const first = await invoke(["index", "--repo", root, "--store", store]);
+  let status = await invoke(["status", "--repo", root, "--store", store]);
+  assert.equal(status.output.freshness.status, "fresh");
+
+  writeFileSync(path.join(root, "src", "main.ts"), "export function changed() { return 2; }\n");
+  status = await invoke(["status", "--repo", root, "--store", store]);
+  assert.equal(status.output.freshness.status, "stale");
+  assert.notEqual(
+    status.output.freshness.observed_manifest.digest,
+    status.output.freshness.indexed_manifest.digest,
+  );
+
+  const staleQuery = await invoke([
+    "definitions", "find", "--repo", root, "--store", store, "--query", "hello",
+  ]);
+  assert.equal(staleQuery.code, 0);
+  assert.equal(staleQuery.output.snapshot.freshness, "stale");
+  const rejected = await invoke([
+    "definitions", "find", "--repo", root, "--store", store,
+    "--query", "hello", "--require-fresh",
+  ]);
+  assert.equal(rejected.code, 3);
+  assert.equal(rejected.output.error.code, "STALE_SNAPSHOT");
+
+  const synced = await invoke(["sync", "--repo", root, "--store", store]);
+  assert.equal(synced.code, 0);
+  assert.notEqual(synced.output.snapshot_id, first.output.snapshot_id);
+  assert.deepEqual(synced.output.receipt.extracted_files, ["src/main.ts"]);
+  status = await invoke(["status", "--repo", root, "--store", store]);
+  assert.equal(status.output.freshness.status, "fresh");
+
+  const freshQuery = await invoke([
+    "definitions", "find", "--repo", root, "--store", store,
+    "--query", "changed", "--require-fresh",
+  ]);
+  assert.equal(freshQuery.code, 0);
+  assert.equal(freshQuery.output.snapshot.freshness, "fresh");
 });
