@@ -3,7 +3,7 @@ import Parser from "tree-sitter";
 import TypeScriptGrammar from "tree-sitter-typescript";
 
 import { sha256Text } from "../../../contract/hash.js";
-import type { Diagnostic, SourceFileInput } from "../../../contract/types.js";
+import type { ByteSpan, Diagnostic, SourceFileInput, SubjectLocalRef } from "../../../contract/types.js";
 import {
   type CandidateExtraction,
   type DefinitionContext,
@@ -122,6 +122,7 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
     node: Parser.SyntaxNode,
     context: DefinitionContext,
   ): ReturnType<TypeScriptTreeSitterAdapter["makeCandidate"]>[] {
+    const sourceReference = exportSourceReference(context, node);
     const source = node.childForFieldName("source");
     const specifier = source ? unquote(source.text) : null;
     const clause = node.namedChildren.find((child) => child.type === "export_clause");
@@ -140,13 +141,19 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
                 ...(alias ? { alias: alias.text } : {}),
               }
             : { kind: "name" as const, name: name.text, ...(alias ? { qualifier: alias.text } : {}) };
-          return [this.makeCandidate(context, "EXPORTS", hint, item)];
+          return [this.makeCandidate(context, "EXPORTS", hint, item, sourceReference)];
         });
     }
     const declaration = node.childForFieldName("declaration");
     const name = declaration?.childForFieldName("name") ?? declaration?.descendantsOfType(["identifier", "type_identifier"])[0];
     return name
-      ? [this.makeCandidate(context, "EXPORTS", { kind: "name", name: name.text }, name)]
+      ? [this.makeCandidate(
+          context,
+          "EXPORTS",
+          { kind: "name", name: name.text },
+          name,
+          sourceReference,
+        )]
       : [];
   }
 
@@ -178,6 +185,22 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
         message: `Anonymous ${node.type} is not a V0.1 Definition`,
       }));
   }
+}
+
+function exportSourceReference(context: DefinitionContext, node: Parser.SyntaxNode): SubjectLocalRef {
+  const span = context.offsetMap.span(node);
+  const owner = context.definitions
+    .filter((definition) => definition.kind === "module" && contains(definition.definition_span, span))
+    .sort((left, right) => spanLength(left.definition_span) - spanLength(right.definition_span))[0];
+  return owner ? { kind: "definition", local_id: owner.local_id } : { kind: "source_file" };
+}
+
+function contains(outer: ByteSpan, inner: ByteSpan): boolean {
+  return outer.start_byte <= inner.start_byte && outer.end_byte >= inner.end_byte;
+}
+
+function spanLength(span: ByteSpan): number {
+  return span.end_byte - span.start_byte;
 }
 
 function memberHint(node: Parser.SyntaxNode) {

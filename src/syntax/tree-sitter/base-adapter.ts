@@ -243,9 +243,10 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
     kind: Exclude<RelationKind, "CONTAINS">,
     targetHint: TargetHint,
     evidenceNode: Parser.SyntaxNode,
+    sourceOverride?: SubjectLocalRef,
   ): { candidate: RelationCandidate; evidence: EvidenceDraft } {
     const span = context.offsetMap.span(evidenceNode);
-    const source_local_ref = nearestDefinitionReference(context.definitions, span);
+    const source_local_ref = sourceOverride ?? nearestDefinitionReference(context.definitions, span);
     const local_id = canonicalHash({
       type: "relation_candidate",
       file_path: context.input.relative_path,

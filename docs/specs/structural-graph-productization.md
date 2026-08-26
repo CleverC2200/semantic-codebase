@@ -273,7 +273,7 @@ semantic_codebase_find_paths
 
 | Relation | 合法 source | 合法 target | 自环 |
 | --- | --- | --- | --- |
-| `CONTAINS` | SourceFile、module/class/interface Definition | Definition | 禁止 |
+| `CONTAINS` | SourceFile、任意 Definition | Definition | 禁止 |
 | `IMPORTS` | SourceFile、module Definition | SourceFile、已导出 Definition | 禁止 |
 | `EXPORTS` | SourceFile、module Definition | Definition、re-export SourceFile | 禁止 |
 | `CALLS` | SourceFile、function/method Definition | function/method/class Definition | 允许可证明的递归调用 |

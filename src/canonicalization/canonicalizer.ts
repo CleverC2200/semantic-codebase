@@ -36,6 +36,7 @@ interface CanonicalizationState {
   manifestsByLanguage: Map<string, SyntaxAdapterManifest>;
   canonicalEvidenceByDraftRef: Map<string, CanonicalEvidence>;
   canonicalDefinitionsByDraftRef: Map<string, CanonicalDefinition>;
+  canonicalDefinitionsByKey: Map<string, CanonicalDefinition>;
   conflictedDefinitionRefs: Set<string>;
 }
 
@@ -51,6 +52,7 @@ export class SnapshotCanonicalizer implements Canonicalizer {
       manifestsByLanguage,
       canonicalEvidenceByDraftRef: new Map(),
       canonicalDefinitionsByDraftRef: new Map(),
+      canonicalDefinitionsByKey: new Map(),
       conflictedDefinitionRefs: new Set(),
     };
 
@@ -255,6 +257,7 @@ function canonicalizeDefinitions(state: CanonicalizationState): CanonicalDefinit
       evidence_ids,
     };
     definitions.push(canonical);
+    state.canonicalDefinitionsByKey.set(canonical.definition_key, canonical);
     for (const equivalent of items) {
       state.canonicalDefinitionsByDraftRef.set(
         localRef(equivalent.file_path, equivalent.draft.local_id),
@@ -348,7 +351,7 @@ function canonicalizeRelations(state: CanonicalizationState): CanonicalRelation[
       });
       continue;
     }
-    mergeRelation(relations, makeCanonicalRelation(
+    const relation = makeCanonicalRelation(
       state,
       located.candidate.kind,
       source,
@@ -356,7 +359,13 @@ function canonicalizeRelations(state: CanonicalizationState): CanonicalRelation[
       evidence_ids,
       "resolver",
       [resolved.candidate_local_id],
-    ));
+    );
+    const invariantDiagnostic = relationInvariantDiagnostic(state, relation, located.file_path);
+    if (invariantDiagnostic) {
+      state.diagnostics.push(invariantDiagnostic);
+      continue;
+    }
+    mergeRelation(relations, relation);
   }
   return [...relations.values()]
     .map((relation) => ({
@@ -396,7 +405,7 @@ function canonicalizeExactRelation(
     });
     return null;
   }
-  return makeCanonicalRelation(
+  const relation = makeCanonicalRelation(
     state,
     exact.kind,
     source,
@@ -405,6 +414,63 @@ function canonicalizeExactRelation(
     "syntax_exact",
     [],
   );
+  const invariantDiagnostic = relationInvariantDiagnostic(state, relation, slice.file.relative_path);
+  if (invariantDiagnostic) {
+    state.diagnostics.push(invariantDiagnostic);
+    return null;
+  }
+  return relation;
+}
+
+function relationInvariantDiagnostic(
+  state: CanonicalizationState,
+  relation: CanonicalRelation,
+  filePath: string,
+): Diagnostic | null {
+  if (
+    !["CALLS", "REFERENCES"].includes(relation.kind) &&
+    canonicalJson(relation.source) === canonicalJson(relation.target)
+  ) {
+    return {
+      code: "forbidden_relation_self_edge",
+      severity: "error",
+      file_path: filePath,
+      message: `${relation.kind} does not permit identical source and target endpoints`,
+    };
+  }
+
+  const sourceKind = endpointKind(state, relation.source);
+  const targetKind = endpointKind(state, relation.target);
+  const valid = relation.kind === "CONTAINS"
+    ? ["source_file", "module", "class", "interface", "function", "method"].includes(sourceKind) &&
+      targetKind !== "source_file"
+    : relation.kind === "IMPORTS"
+      ? ["source_file", "module"].includes(sourceKind)
+      : relation.kind === "EXPORTS"
+        ? ["source_file", "module"].includes(sourceKind)
+        : relation.kind === "CALLS"
+          ? ["source_file", "function", "method"].includes(sourceKind) &&
+            ["function", "method", "class"].includes(targetKind)
+          : relation.kind === "INHERITS"
+            ? ["class", "interface"].includes(sourceKind) && ["class", "interface"].includes(targetKind)
+            : relation.kind === "IMPLEMENTS"
+              ? sourceKind === "class" && targetKind === "interface"
+              : targetKind !== "source_file";
+  if (valid) return null;
+  return {
+    code: "invalid_relation_endpoints",
+    severity: "error",
+    file_path: filePath,
+    message: `${relation.kind} does not allow ${sourceKind} -> ${targetKind}`,
+  };
+}
+
+function endpointKind(
+  state: CanonicalizationState,
+  endpoint: CanonicalEndpoint,
+): "source_file" | CanonicalDefinition["kind"] | "missing_definition" {
+  if (endpoint.kind === "source_file") return "source_file";
+  return state.canonicalDefinitionsByKey.get(endpoint.definition_key)?.kind ?? "missing_definition";
 }
 
 function makeCanonicalRelation(

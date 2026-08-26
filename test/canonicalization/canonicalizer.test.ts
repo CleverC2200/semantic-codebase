@@ -55,6 +55,15 @@ test("canonicalizer publishes deterministic definitions, relations and evidence"
   assert.ok(graph.relations.length >= graph.definitions.length);
   assert.ok(graph.definitions.every((definition) => definition.evidence_ids.length > 0));
   assert.ok(graph.relations.every((relation) => relation.evidence_ids.length > 0));
+  assert.ok(graph.relations
+    .filter((relation) => relation.kind === "EXPORTS")
+    .every((relation) => relation.source.kind === "source_file"));
+  assert.ok(graph.relations.some((relation) =>
+    relation.kind === "CALLS" &&
+    relation.source.kind === "definition" &&
+    relation.target.kind === "definition" &&
+    relation.source.definition_key === relation.target.definition_key,
+  ));
   assert.ok(graph.evidence.every((evidence) => evidence.source_digest.length === 64));
   assert.equal(
     graph.diagnostics.filter((diagnostic) => diagnostic.code === "unresolved_relation_candidate").length,
@@ -138,6 +147,27 @@ test("canonicalizer rejects stale and duplicate Candidate resolutions", () => {
   assert.ok(graph.diagnostics.some((diagnostic) => diagnostic.code === "stale_resolution"));
   assert.ok(!graph.relations.some((relation) =>
     relation.candidate_local_ids.includes(firstResolved.candidate_local_id),
+  ));
+});
+
+test("semantic invariant gate rejects the historical EXPORTS self-edge", () => {
+  const repository = fixture();
+  const exportCandidate = repository.slices
+    .flatMap((slice) => slice.relation_candidates)
+    .find((candidate) => candidate.kind === "EXPORTS");
+  const exportedDefinition = repository.slices
+    .flatMap((slice) => slice.definitions)
+    .find((definition) => definition.name === "Base");
+  assert.ok(exportCandidate);
+  assert.ok(exportedDefinition);
+  exportCandidate.source_local_ref = { kind: "definition", local_id: exportedDefinition.local_id };
+  const resolution = new DeterministicResolver().resolve(repository);
+  const graph = new SnapshotCanonicalizer().canonicalize({ repository, resolution });
+
+  assert.equal(graph.coverage.status, "failed");
+  assert.ok(graph.diagnostics.some((diagnostic) => diagnostic.code === "forbidden_relation_self_edge"));
+  assert.ok(!graph.relations.some((relation) =>
+    relation.kind === "EXPORTS" && relation.candidate_local_ids.includes(exportCandidate.local_id),
   ));
 });
 
