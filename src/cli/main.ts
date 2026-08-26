@@ -2,9 +2,11 @@
 import { pathToFileURL } from "node:url";
 
 import { canonicalJson } from "../contract/hash.js";
+import type { RelationKind } from "../contract/types.js";
 import { RepositoryIndexer } from "../indexing/indexer.js";
 import { IndexBuildError, type IndexBuildResult, type IndexState } from "../indexing/types.js";
 import { DefinitionQueryService } from "../query/definition-query.js";
+import { GraphQueryService } from "../query/graph-query.js";
 import { QueryError } from "../query/types.js";
 import {
   discoverRepository,
@@ -91,6 +93,17 @@ function execute(
       ...(numberOption(parsed, "source-bytes") !== undefined
         ? { source_bytes: numberOption(parsed, "source-bytes") }
         : {}),
+    });
+  }
+  if (command === "graph traverse") {
+    return new GraphQueryService(store).traverse({
+      ...scope,
+      start_definition_key: requiredOption(parsed, "start-definition-key"),
+      ...(parsed.options.get("direction") ? { direction: parsed.options.get("direction") as "outgoing" | "incoming" | "both" } : {}),
+      ...(relationKindsOption(parsed) ? { relation_kinds: relationKindsOption(parsed) } : {}),
+      ...(numberOption(parsed, "max-depth") !== undefined ? { max_depth: numberOption(parsed, "max-depth") } : {}),
+      ...(numberOption(parsed, "max-nodes") !== undefined ? { max_nodes: numberOption(parsed, "max-nodes") } : {}),
+      ...(numberOption(parsed, "timeout-ms") !== undefined ? { timeout_ms: numberOption(parsed, "timeout-ms") } : {}),
     });
   }
   throw new QueryError("INVALID_ARGUMENT", `Unknown command: ${command || "<empty>"}`);
@@ -213,6 +226,19 @@ function numberOption(parsed: ParsedArguments, name: string): number | undefined
   const value = Number(raw);
   if (!Number.isInteger(value)) throw new QueryError("INVALID_ARGUMENT", `--${name} must be an integer`);
   return value;
+}
+
+function relationKindsOption(parsed: ParsedArguments): RelationKind[] | undefined {
+  const raw = parsed.options.get("relation-kinds");
+  if (!raw) return undefined;
+  const allowed = new Set<RelationKind>([
+    "CONTAINS", "IMPORTS", "EXPORTS", "CALLS", "INHERITS", "IMPLEMENTS", "REFERENCES",
+  ]);
+  const values = raw.split(",").filter(Boolean);
+  if (values.length === 0 || values.some((value) => !allowed.has(value as RelationKind))) {
+    throw new QueryError("INVALID_ARGUMENT", "--relation-kinds contains an unsupported Relation kind");
+  }
+  return values as RelationKind[];
 }
 
 function normalizeError(error: unknown): { code: string; message: string } {

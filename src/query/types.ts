@@ -2,7 +2,9 @@ import type {
   CanonicalCoverage,
   CanonicalDefinition,
   CanonicalEvidence,
+  CanonicalRelation,
 } from "../canonicalization/types.js";
+import type { RelationKind } from "../contract/types.js";
 
 export type Freshness = "fresh" | "stale" | "unknown";
 
@@ -70,6 +72,37 @@ export interface DefinitionQueryStore {
   findDefinitions(repositoryId: string, snapshotId: string, query: string, limit: number): CanonicalDefinition[];
   readDefinition(repositoryId: string, snapshotId: string, definitionKey: string): CanonicalDefinition | null;
   readEvidence(repositoryId: string, snapshotId: string, evidenceId: string): CanonicalEvidence | null;
+}
+
+export type TraversalDirection = "outgoing" | "incoming" | "both";
+
+export interface TraverseInput {
+  repository_id: string;
+  snapshot: "current_ready" | string;
+  start_definition_key: string;
+  direction?: TraversalDirection;
+  relation_kinds?: RelationKind[];
+  max_depth?: number;
+  max_nodes?: number;
+  timeout_ms?: number;
+  observed_manifest_digest?: string;
+  require_fresh?: boolean;
+}
+
+export interface TraverseData {
+  start_definition_key: string;
+  nodes: Array<{ definition: CanonicalDefinition; depth: number }>;
+  relations: CanonicalRelation[];
+}
+
+export interface GraphQueryStore extends DefinitionQueryStore {
+  readAdjacentRelations(
+    repositoryId: string,
+    snapshotId: string,
+    definitionKeys: string[],
+    direction: TraversalDirection,
+    relationKinds: RelationKind[],
+  ): CanonicalRelation[];
 }
 
 export class QueryError extends Error {

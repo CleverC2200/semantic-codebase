@@ -116,3 +116,45 @@ test("status, require_fresh and sync expose Manifest freshness without hiding st
   assert.equal(freshQuery.code, 0);
   assert.equal(freshQuery.output.snapshot.freshness, "fresh");
 });
+
+test("graph traverse performs deterministic budgeted BFS over Definition relations", async () => {
+  const { root, store } = fixture();
+  writeFileSync(
+    path.join(root, "src", "main.ts"),
+    "export function leaf() {}\nexport function root() { leaf(); }\n",
+  );
+  await invoke(["index", "--repo", root, "--store", store]);
+  const found = await invoke([
+    "definitions", "find", "--repo", root, "--store", store, "--query", "root",
+  ]);
+  assert.equal(found.code, 0, JSON.stringify(found.output));
+  const rootDefinition = found.output.data.definitions[0];
+  assert.ok(rootDefinition);
+
+  const arguments_ = [
+    "graph", "traverse", "--repo", root, "--store", store,
+    "--start-definition-key", rootDefinition.definition_key,
+    "--relation-kinds", "CALLS", "--direction", "outgoing",
+  ];
+  const first = await invoke(arguments_);
+  const second = await invoke(arguments_);
+  assert.equal(first.code, 0);
+  assert.deepEqual(first.output.data, second.output.data);
+  assert.deepEqual(first.output.data.nodes.map((node: any) => [node.definition.name, node.depth]), [
+    ["root", 0],
+    ["leaf", 1],
+  ]);
+  assert.equal(first.output.data.relations.length, 1);
+  assert.equal(first.output.data.relations[0].kind, "CALLS");
+  assert.equal(first.output.completeness.complete, true);
+
+  const truncated = await invoke([...arguments_, "--max-depth", "0"]);
+  assert.equal(truncated.output.completeness.truncated, true);
+  assert.equal(truncated.output.completeness.reason, "max_depth");
+  assert.equal(truncated.output.data.nodes.length, 1);
+
+  const nodeLimited = await invoke([...arguments_, "--max-nodes", "1"]);
+  assert.equal(nodeLimited.output.completeness.truncated, true);
+  assert.equal(nodeLimited.output.completeness.reason, "max_nodes");
+  assert.equal(nodeLimited.output.data.nodes.length, 1);
+});

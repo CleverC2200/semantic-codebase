@@ -8,7 +8,10 @@ import type {
   CanonicalCoverage,
   CanonicalDefinition,
   CanonicalEvidence,
+  CanonicalRelation,
 } from "../canonicalization/types.js";
+import type { RelationKind } from "../contract/types.js";
+import type { TraversalDirection } from "../query/types.js";
 import type { IndexState } from "../indexing/types.js";
 import type { SnapshotStatus, SnapshotStore, SnapshotSummary } from "./types.js";
 import { SnapshotStoreError } from "./types.js";
@@ -209,10 +212,12 @@ export class SqliteSnapshotStore implements SnapshotStore {
     const rows = this.database.prepare(
       `SELECT d.definition_json
        FROM definitions d
-       LEFT JOIN definitions_fts f ON f.repository_id = d.repository_id
-         AND f.snapshot_id = d.snapshot_id AND f.definition_key = d.definition_key
        WHERE d.repository_id = ? AND d.snapshot_id = ? AND (
-         d.qualified_name = ? OR d.name = ? OR d.qualified_name LIKE ? ESCAPE '\\' OR definitions_fts MATCH ?
+         d.qualified_name = ? OR d.name = ? OR d.qualified_name LIKE ? ESCAPE '\\' OR EXISTS (
+           SELECT 1 FROM definitions_fts f
+           WHERE f.repository_id = d.repository_id AND f.snapshot_id = d.snapshot_id
+             AND f.definition_key = d.definition_key AND definitions_fts MATCH ?
+         )
        )
        ORDER BY
          CASE
@@ -252,6 +257,34 @@ export class SqliteSnapshotStore implements SnapshotStore {
        WHERE repository_id = ? AND snapshot_id = ? AND evidence_id = ?`,
     ).get(repositoryId, snapshotId, evidenceId) as { evidence_json: string } | undefined;
     return row ? JSON.parse(row.evidence_json) as CanonicalEvidence : null;
+  }
+
+  readAdjacentRelations(
+    repositoryId: string,
+    snapshotId: string,
+    definitionKeys: string[],
+    direction: TraversalDirection,
+    relationKinds: RelationKind[],
+  ): CanonicalRelation[] {
+    if (definitionKeys.length === 0) return [];
+    const placeholders = definitionKeys.map(() => "?").join(", ");
+    const endpointClause = direction === "outgoing"
+      ? `source_definition_key IN (${placeholders})`
+      : direction === "incoming"
+        ? `target_definition_key IN (${placeholders})`
+        : `(source_definition_key IN (${placeholders}) OR target_definition_key IN (${placeholders}))`;
+    const kindClause = relationKinds.length > 0
+      ? `AND kind IN (${relationKinds.map(() => "?").join(", ")})`
+      : "";
+    const endpointParameters = direction === "both"
+      ? [...definitionKeys, ...definitionKeys]
+      : definitionKeys;
+    const rows = this.database.prepare(
+      `SELECT relation_json FROM relations
+       WHERE repository_id = ? AND snapshot_id = ? AND ${endpointClause} ${kindClause}
+       ORDER BY kind, relation_key`,
+    ).all(repositoryId, snapshotId, ...endpointParameters, ...relationKinds) as Array<{ relation_json: string }>;
+    return rows.map((row) => JSON.parse(row.relation_json) as CanonicalRelation);
   }
 
   close(): void {
