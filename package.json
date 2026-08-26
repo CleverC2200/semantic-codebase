@@ -6,10 +6,14 @@
   "exports": {
     ".": "./dist/index.js"
   },
+  "bin": {
+    "scb": "./dist/cli/main.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-query-assets.mjs",
     "test": "node --import tsx --test test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "scb": "npm run build && node dist/cli/main.js",
     "benchmark:syntax": "npm run build && node --expose-gc scripts/benchmark-syntax.mjs",
     "corpus:zod": "npm run build && node scripts/generate-zod-smoke.mjs"
   },

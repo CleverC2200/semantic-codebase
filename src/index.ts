@@ -6,3 +6,6 @@ export * from "./resolution/index.js";
 export * from "./canonicalization/index.js";
 export * from "./indexing/index.js";
 export * from "./store/index.js";
+export * from "./repository/index.js";
+export * from "./query/index.js";
+export { runCli } from "./cli/main.js";

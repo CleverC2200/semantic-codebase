@@ -1,0 +1,163 @@
+#!/usr/bin/env node
+import { pathToFileURL } from "node:url";
+
+import { canonicalJson } from "../contract/hash.js";
+import { RepositoryIndexer } from "../indexing/indexer.js";
+import { DefinitionQueryService } from "../query/definition-query.js";
+import { QueryError } from "../query/types.js";
+import { discoverRepository, RepositorySourceError } from "../repository/source.js";
+import { PythonTreeSitterAdapter, TypeScriptTreeSitterAdapter } from "../syntax/index.js";
+import { SqliteSnapshotStore } from "../store/sqlite-store.js";
+import { SnapshotStoreError } from "../store/types.js";
+
+interface CliIo {
+  stdout: { write(value: string): unknown };
+  stderr: { write(value: string): unknown };
+}
+
+interface ParsedArguments {
+  command: string[];
+  options: Map<string, string>;
+}
+
+export async function runCli(argv: string[], io: CliIo = process): Promise<number> {
+  try {
+    const parsed = parseArguments(argv);
+    const repositoryPath = requiredOption(parsed, "repo");
+    const discovered = discoverRepository(repositoryPath, parsed.options.get("store"));
+    const store = new SqliteSnapshotStore(discovered.store_path);
+    try {
+      const output = execute(parsed, discovered, store);
+      io.stdout.write(`${canonicalJson(output)}\n`);
+      return 0;
+    } finally {
+      store.close();
+    }
+  } catch (error) {
+    const normalized = normalizeError(error);
+    io.stdout.write(`${canonicalJson({ schema_version: 1, error: normalized })}\n`);
+    return exitCode(normalized.code);
+  }
+}
+
+function execute(
+  parsed: ParsedArguments,
+  discovered: ReturnType<typeof discoverRepository>,
+  store: SqliteSnapshotStore,
+): unknown {
+  const command = parsed.command.join(" ");
+  if (command === "index") {
+    const result = new RepositoryIndexer({
+      adapters: [new TypeScriptTreeSitterAdapter(), new PythonTreeSitterAdapter()],
+      index_config: { excluded_directories: "v1-defaults" },
+    }).buildFull(discovered.source);
+    const existing = store.getSnapshotSummary(discovered.source.repository_id, result.state.snapshot_id);
+    if (existing && ["ready", "superseded"].includes(existing.status)) {
+      store.activateReady(discovered.source.repository_id, result.state.snapshot_id);
+    } else {
+      store.beginBuild(discovered.source.repository_id, result.state.snapshot_id);
+      try {
+        store.publishReady(result.state);
+      } catch (error) {
+        store.markFailed(discovered.source.repository_id, result.state.snapshot_id, String(error));
+        throw error;
+      }
+    }
+    return {
+      schema_version: 1,
+      command: "index",
+      repository_id: discovered.source.repository_id,
+      snapshot_id: result.state.snapshot_id,
+      graph_hash: result.state.graph.graph_hash,
+      coverage: result.state.graph.coverage,
+      receipt: result.receipt,
+      reused_snapshot: Boolean(existing),
+      store_path: discovered.store_path,
+    };
+  }
+
+  const query = new DefinitionQueryService(store);
+  const scope = {
+    repository_id: discovered.source.repository_id,
+    snapshot: parsed.options.get("snapshot") ?? "current_ready",
+  };
+  if (command === "definitions find") {
+    return query.findDefinitions({
+      ...scope,
+      query: requiredOption(parsed, "query"),
+      ...(numberOption(parsed, "max-results") !== undefined
+        ? { max_results: numberOption(parsed, "max-results") }
+        : {}),
+    });
+  }
+  if (command === "definition get") {
+    return query.getDefinition({ ...scope, definition_key: requiredOption(parsed, "definition-key") });
+  }
+  if (command === "evidence get") {
+    return query.getEvidence({
+      ...scope,
+      evidence_id: requiredOption(parsed, "evidence-id"),
+      repository_root: discovered.root_path,
+      ...(numberOption(parsed, "source-bytes") !== undefined
+        ? { source_bytes: numberOption(parsed, "source-bytes") }
+        : {}),
+    });
+  }
+  throw new QueryError("INVALID_ARGUMENT", `Unknown command: ${command || "<empty>"}`);
+}
+
+function parseArguments(argv: string[]): ParsedArguments {
+  const command: string[] = [];
+  const options = new Map<string, string>();
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]!;
+    if (!argument.startsWith("--")) {
+      if (options.size > 0) throw new QueryError("INVALID_ARGUMENT", `Unexpected argument: ${argument}`);
+      command.push(argument);
+      continue;
+    }
+    const name = argument.slice(2);
+    const value = argv[index + 1];
+    if (!name || !value || value.startsWith("--")) {
+      throw new QueryError("INVALID_ARGUMENT", `Option --${name} requires a value`);
+    }
+    if (options.has(name)) throw new QueryError("INVALID_ARGUMENT", `Duplicate option: --${name}`);
+    options.set(name, value);
+    index += 1;
+  }
+  return { command, options };
+}
+
+function requiredOption(parsed: ParsedArguments, name: string): string {
+  const value = parsed.options.get(name);
+  if (!value) throw new QueryError("INVALID_ARGUMENT", `--${name} is required`);
+  return value;
+}
+
+function numberOption(parsed: ParsedArguments, name: string): number | undefined {
+  const raw = parsed.options.get(name);
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) throw new QueryError("INVALID_ARGUMENT", `--${name} must be an integer`);
+  return value;
+}
+
+function normalizeError(error: unknown): { code: string; message: string } {
+  if (error instanceof QueryError || error instanceof SnapshotStoreError || error instanceof RepositorySourceError) {
+    return { code: error.code, message: error.message };
+  }
+  if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+    return { code: "REPOSITORY_NOT_FOUND", message: "Repository path does not exist" };
+  }
+  return { code: "INTERNAL_QUERY_ERROR", message: error instanceof Error ? error.message : String(error) };
+}
+
+function exitCode(code: string): number {
+  if (code === "INVALID_ARGUMENT") return 2;
+  if (["REPOSITORY_NOT_FOUND", "SNAPSHOT_NOT_FOUND", "NO_READY_SNAPSHOT", "SNAPSHOT_NOT_READY"].includes(code)) return 3;
+  return 4;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = await runCli(process.argv.slice(2));
+}

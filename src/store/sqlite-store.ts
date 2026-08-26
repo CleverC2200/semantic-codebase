@@ -4,6 +4,11 @@ import path from "node:path";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 
 import { canonicalHash, canonicalJson } from "../contract/hash.js";
+import type {
+  CanonicalCoverage,
+  CanonicalDefinition,
+  CanonicalEvidence,
+} from "../canonicalization/types.js";
 import type { IndexState } from "../indexing/types.js";
 import type { SnapshotStatus, SnapshotStore, SnapshotSummary } from "./types.js";
 import { SnapshotStoreError } from "./types.js";
@@ -114,6 +119,30 @@ export class SqliteSnapshotStore implements SnapshotStore {
     }
   }
 
+  activateReady(repositoryId: string, snapshotId: string): void {
+    this.transaction(() => {
+      const selected = this.snapshotRow(repositoryId, snapshotId);
+      if (!selected || !["ready", "superseded"].includes(selected.status) || !selected.state_json) {
+        throw new SnapshotStoreError("SNAPSHOT_NOT_READY", `Snapshot is not publishable: ${snapshotId}`);
+      }
+      const prior = this.database.prepare(
+        "SELECT snapshot_id FROM repository_ready_pointer WHERE repository_id = ?",
+      ).get(repositoryId) as { snapshot_id: string } | undefined;
+      if (prior && prior.snapshot_id !== snapshotId) {
+        this.database.prepare(
+          "UPDATE snapshots SET status = 'superseded' WHERE repository_id = ? AND snapshot_id = ? AND status = 'ready'",
+        ).run(repositoryId, prior.snapshot_id);
+      }
+      this.database.prepare(
+        "UPDATE snapshots SET status = 'ready' WHERE repository_id = ? AND snapshot_id = ?",
+      ).run(repositoryId, snapshotId);
+      this.database.prepare(
+        `INSERT INTO repository_ready_pointer(repository_id, snapshot_id) VALUES (?, ?)
+         ON CONFLICT(repository_id) DO UPDATE SET snapshot_id = excluded.snapshot_id, updated_at = CURRENT_TIMESTAMP`,
+      ).run(repositoryId, snapshotId);
+    });
+  }
+
   getCurrentReady(repositoryId: string): IndexState | null {
     const row = this.database.prepare(
       `SELECT s.* FROM repository_ready_pointer p
@@ -138,6 +167,80 @@ export class SqliteSnapshotStore implements SnapshotStore {
           error_message: row.error_message,
         }
       : null;
+  }
+
+  resolveReadySnapshot(
+    repositoryId: string,
+    selector: "current_ready" | string,
+  ): { snapshot_id: string; coverage: CanonicalCoverage } | null {
+    const snapshotId = selector === "current_ready"
+      ? (this.database.prepare(
+          "SELECT snapshot_id FROM repository_ready_pointer WHERE repository_id = ?",
+        ).get(repositoryId) as { snapshot_id: string } | undefined)?.snapshot_id
+      : selector;
+    if (!snapshotId) return null;
+    const row = this.database.prepare(
+      `SELECT s.status, c.coverage_json
+       FROM snapshots s JOIN snapshot_coverage c
+         ON c.repository_id = s.repository_id AND c.snapshot_id = s.snapshot_id
+       WHERE s.repository_id = ? AND s.snapshot_id = ? AND s.status IN ('ready', 'superseded')`,
+    ).get(repositoryId, snapshotId) as { status: SnapshotStatus; coverage_json: string } | undefined;
+    return row ? { snapshot_id: snapshotId, coverage: JSON.parse(row.coverage_json) as CanonicalCoverage } : null;
+  }
+
+  findDefinitions(
+    repositoryId: string,
+    snapshotId: string,
+    query: string,
+    limit: number,
+  ): CanonicalDefinition[] {
+    const ftsQuery = `"${query.replaceAll('"', '""')}"`;
+    const rows = this.database.prepare(
+      `SELECT d.definition_json
+       FROM definitions d
+       LEFT JOIN definitions_fts f ON f.repository_id = d.repository_id
+         AND f.snapshot_id = d.snapshot_id AND f.definition_key = d.definition_key
+       WHERE d.repository_id = ? AND d.snapshot_id = ? AND (
+         d.qualified_name = ? OR d.name = ? OR d.qualified_name LIKE ? ESCAPE '\\' OR definitions_fts MATCH ?
+       )
+       ORDER BY
+         CASE
+           WHEN d.qualified_name = ? THEN 0
+           WHEN d.name = ? THEN 1
+           WHEN d.qualified_name LIKE ? ESCAPE '\\' THEN 2
+           ELSE 3
+         END,
+         d.definition_key
+       LIMIT ?`,
+    ).all(
+      repositoryId,
+      snapshotId,
+      query,
+      query,
+      `${escapeLike(query)}%`,
+      ftsQuery,
+      query,
+      query,
+      `${escapeLike(query)}%`,
+      limit,
+    ) as Array<{ definition_json: string }>;
+    return rows.map((row) => JSON.parse(row.definition_json) as CanonicalDefinition);
+  }
+
+  readDefinition(repositoryId: string, snapshotId: string, definitionKey: string): CanonicalDefinition | null {
+    const row = this.database.prepare(
+      `SELECT definition_json FROM definitions
+       WHERE repository_id = ? AND snapshot_id = ? AND definition_key = ?`,
+    ).get(repositoryId, snapshotId, definitionKey) as { definition_json: string } | undefined;
+    return row ? JSON.parse(row.definition_json) as CanonicalDefinition : null;
+  }
+
+  readEvidence(repositoryId: string, snapshotId: string, evidenceId: string): CanonicalEvidence | null {
+    const row = this.database.prepare(
+      `SELECT evidence_json FROM evidence
+       WHERE repository_id = ? AND snapshot_id = ? AND evidence_id = ?`,
+    ).get(repositoryId, snapshotId, evidenceId) as { evidence_json: string } | undefined;
+    return row ? JSON.parse(row.evidence_json) as CanonicalEvidence : null;
   }
 
   close(): void {
@@ -374,6 +477,10 @@ function requireIdentity(repositoryId: string, snapshotId: string): void {
   if (!repositoryId || !snapshotId) {
     throw new SnapshotStoreError("STORE_INTEGRITY_ERROR", "Repository and Snapshot identities are required");
   }
+}
+
+function escapeLike(value: string): string {
+  return value.replaceAll("%", "\\%").replaceAll("_", "\\_");
 }
 
 const SCHEMA_V1 = `
