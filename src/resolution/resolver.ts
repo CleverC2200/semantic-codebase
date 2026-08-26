@@ -1,11 +1,10 @@
 import path from "node:path";
 
-import { canonicalHash, canonicalJson } from "../contract/hash.js";
+import { canonicalJson } from "../contract/hash.js";
 import type {
   DefinitionDraft,
   Diagnostic,
   RelationCandidate,
-  SubjectLocalRef,
   SyntaxSlice,
   TargetHint,
 } from "../contract/types.js";
@@ -106,26 +105,17 @@ export class DeterministicResolver implements Resolver {
         });
         continue;
       }
-      const source = endpointForSource(location.file_path, location.candidate.source_local_ref);
       resolved_relations.push({
-        local_id: canonicalHash({
-          type: "resolved_relation",
-          candidate: location.candidate.local_id,
-          kind: location.candidate.kind,
-          source,
-          target: result.target,
-          snapshot_id: view.manifest.snapshot_id,
-        }),
         candidate_local_id: location.candidate.local_id,
-        kind: location.candidate.kind,
-        source,
         target: result.target,
-        evidence_local_ids: [...location.candidate.evidence_local_ids].sort(),
-        derivation: result.derivation,
+        derivation: [...result.derivation],
       });
     }
 
-    resolved_relations.sort((left, right) => left.local_id.localeCompare(right.local_id));
+    resolved_relations.sort((left, right) =>
+      left.candidate_local_id.localeCompare(right.candidate_local_id) ||
+      canonicalJson(left).localeCompare(canonicalJson(right)),
+    );
     unresolved_candidates.sort((left, right) => left.local_id.localeCompare(right.local_id));
     diagnostics.sort((left, right) =>
       left.file_path.localeCompare(right.file_path) ||
@@ -417,12 +407,6 @@ function owningClass(location: CandidateLocation): DefinitionDraft | null {
       : undefined;
   }
   return null;
-}
-
-function endpointForSource(filePath: string, source: SubjectLocalRef): ResolvedEndpoint {
-  return source.kind === "source_file"
-    ? { kind: "source_file", file_path: filePath }
-    : { kind: "definition", file_path: filePath, definition_local_id: source.local_id };
 }
 
 function definitionEndpoint(located: LocatedDefinition): ResolvedEndpoint {

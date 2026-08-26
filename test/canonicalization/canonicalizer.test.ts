@@ -119,6 +119,28 @@ test("cross-snapshot and undeclared relation results cannot enter the graph", ()
   assert.ok(graph.relations.every((relation) => relation.origin === "syntax_exact"));
 });
 
+test("canonicalizer rejects stale and duplicate Candidate resolutions", () => {
+  const repository = fixture();
+  const resolution = new DeterministicResolver().resolve(repository);
+  const firstResolved = resolution.resolved_relations[0];
+  assert.ok(firstResolved);
+  resolution.resolved_relations.push(structuredClone(firstResolved));
+  resolution.resolved_relations.push({
+    candidate_local_id: "missing-candidate",
+    target: firstResolved.target,
+    derivation: ["forged"],
+  });
+
+  const graph = new SnapshotCanonicalizer().canonicalize({ repository, resolution });
+
+  assert.equal(graph.coverage.status, "failed");
+  assert.ok(graph.diagnostics.some((diagnostic) => diagnostic.code === "duplicate_candidate_resolution"));
+  assert.ok(graph.diagnostics.some((diagnostic) => diagnostic.code === "stale_resolution"));
+  assert.ok(!graph.relations.some((relation) =>
+    relation.candidate_local_ids.includes(firstResolved.candidate_local_id),
+  ));
+});
+
 test("equivalent drafts merge while conflicting drafts are isolated", () => {
   const repository = fixture();
   const slice = repository.slices[0]!;

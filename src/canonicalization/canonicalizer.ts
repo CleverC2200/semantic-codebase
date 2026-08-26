@@ -4,6 +4,7 @@ import type {
   Diagnostic,
   EvidenceDraft,
   ExactRelationDraft,
+  RelationCandidate,
   SyntaxAdapterManifest,
   SyntaxSlice,
 } from "../contract/types.js";
@@ -22,6 +23,11 @@ interface LocatedDefinition {
   file_path: string;
   slice: SyntaxSlice;
   draft: DefinitionDraft;
+}
+
+interface LocatedCandidate {
+  file_path: string;
+  candidate: RelationCandidate;
 }
 
 interface CanonicalizationState {
@@ -278,46 +284,73 @@ function canonicalizeRelations(state: CanonicalizationState): CanonicalRelation[
       if (relation) mergeRelation(relations, relation);
     }
   }
-  const candidateIds = new Set(
-    state.input.repository.slices.flatMap((slice) =>
-      slice.relation_candidates.map((candidate) => candidate.local_id),
-    ),
-  );
+  const candidatesById = new Map<string, LocatedCandidate[]>();
+  for (const slice of state.input.repository.slices) {
+    for (const candidate of slice.relation_candidates) {
+      const located = candidatesById.get(candidate.local_id) ?? [];
+      located.push({ file_path: slice.file.relative_path, candidate });
+      candidatesById.set(candidate.local_id, located);
+    }
+  }
+  const resolutionCounts = new Map<string, number>();
   for (const resolved of state.input.resolution.resolved_relations) {
-    if (!candidateIds.has(resolved.candidate_local_id)) {
+    resolutionCounts.set(
+      resolved.candidate_local_id,
+      (resolutionCounts.get(resolved.candidate_local_id) ?? 0) + 1,
+    );
+  }
+  for (const resolved of state.input.resolution.resolved_relations) {
+    const candidates = candidatesById.get(resolved.candidate_local_id) ?? [];
+    if (candidates.length !== 1) {
       state.diagnostics.push({
         code: "stale_resolution",
         severity: "error",
-        file_path: resolved.source.file_path,
-        message: "Resolved relation does not reference a current Candidate",
+        file_path: candidates[0]?.file_path ?? "",
+        message: "Resolved relation must reference exactly one current Candidate",
       });
       continue;
     }
-    const manifest = manifestForFile(state, resolved.source.file_path);
-    if (!manifest?.capabilities.candidate_relation_kinds.includes(resolved.kind)) {
+    const located = candidates[0]!;
+    if (resolutionCounts.get(resolved.candidate_local_id) !== 1) {
+      state.diagnostics.push({
+        code: "duplicate_candidate_resolution",
+        severity: "error",
+        file_path: located.file_path,
+        message: "A Candidate may produce at most one resolved relation",
+      });
+      continue;
+    }
+    const manifest = manifestForFile(state, located.file_path);
+    if (!manifest?.capabilities.candidate_relation_kinds.includes(located.candidate.kind)) {
       state.diagnostics.push({
         code: "undeclared_relation_capability",
         severity: "error",
-        file_path: resolved.source.file_path,
-        message: `${resolved.kind} is not declared by the source Adapter Profile`,
+        file_path: located.file_path,
+        message: `${located.candidate.kind} is not declared by the source Adapter Profile`,
       });
       continue;
     }
-    const source = mapEndpoint(state, resolved.source);
+    const source = located.candidate.source_local_ref.kind === "source_file"
+      ? { kind: "source_file" as const, file_path: located.file_path }
+      : mapDefinitionEndpoint(state, located.file_path, located.candidate.source_local_ref.local_id);
     const target = mapEndpoint(state, resolved.target);
-    const evidence_ids = mapCompleteEvidenceIds(state, resolved.source.file_path, resolved.evidence_local_ids);
+    const evidence_ids = mapCompleteEvidenceIds(
+      state,
+      located.file_path,
+      located.candidate.evidence_local_ids,
+    );
     if (!source || !target || !evidence_ids) {
       state.diagnostics.push({
         code: "invalid_resolved_relation",
         severity: "error",
-        file_path: resolved.source.file_path,
+        file_path: located.file_path,
         message: "Resolved relation has a missing endpoint or Evidence",
       });
       continue;
     }
     mergeRelation(relations, makeCanonicalRelation(
       state,
-      resolved.kind,
+      located.candidate.kind,
       source,
       target,
       evidence_ids,

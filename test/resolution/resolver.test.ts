@@ -44,6 +44,19 @@ function view(files: Array<[string, string]>): FrozenRepositoryView {
   };
 }
 
+function resolvedKinds(repository: FrozenRepositoryView): string[] {
+  const candidates = new Map(
+    repository.slices.flatMap((item) =>
+      item.relation_candidates.map((candidate) => [candidate.local_id, candidate.kind] as const),
+    ),
+  );
+  return new DeterministicResolver().resolve(repository).resolved_relations.map((relation) => {
+    const kind = candidates.get(relation.candidate_local_id);
+    assert.ok(kind);
+    return kind;
+  });
+}
+
 test("resolver promotes only unique same-file and explicit import targets", () => {
   const repository = view([
     ["src/dep.ts", "export class Base { work() {} }\nexport function helper() {}\n"],
@@ -58,11 +71,13 @@ test("resolver promotes only unique same-file and explicit import targets", () =
     ],
   ]);
   const result = new DeterministicResolver().resolve(repository);
-  const resolved = result.resolved_relations.map((relation) => relation.kind);
+  const resolved = resolvedKinds(repository);
 
   assert.equal(result.coverage.status, "complete");
   assert.deepEqual(resolved.sort(), ["CALLS", "CALLS", "EXPORTS", "EXPORTS", "EXPORTS", "IMPORTS", "IMPORTS", "INHERITS"].sort());
-  assert.ok(result.resolved_relations.every((relation) => relation.evidence_local_ids.length > 0));
+  assert.ok(result.resolved_relations.every((relation) =>
+    Object.keys(relation).sort().join(",") === "candidate_local_id,derivation,target",
+  ));
   assert.equal(new Set(Array.from({ length: 3 }, () => canonicalHash(new DeterministicResolver().resolve(repository)))).size, 1);
 });
 
@@ -74,8 +89,9 @@ test("alias, namespace and circular imports resolve without recursive guessing",
   const result = new DeterministicResolver().resolve(repository);
 
   assert.equal(result.coverage.candidate_count, 5);
-  assert.ok(result.resolved_relations.some((relation) => relation.kind === "CALLS"));
-  assert.ok(result.resolved_relations.filter((relation) => relation.kind === "IMPORTS").length === 2);
+  const kinds = resolvedKinds(repository);
+  assert.ok(kinds.includes("CALLS"));
+  assert.equal(kinds.filter((kind) => kind === "IMPORTS").length, 2);
 });
 
 test("zero targets, duplicate names and ambiguous module paths remain unresolved", () => {
@@ -136,7 +152,20 @@ test("Python relative imports and aliases resolve against the frozen manifest", 
   });
 
   assert.deepEqual(
-    result.resolved_relations.map((relation) => relation.kind).sort(),
+    resolvedKinds({
+      manifest: {
+        repository_id: "repo",
+        snapshot_id: "python-snapshot",
+        files: slices.map((item) => ({
+          ...item.file,
+          byte_length: new TextEncoder().encode(
+            sources.find(([filePath]) => filePath === item.file.relative_path)?.[1] ?? "",
+          ).byteLength,
+        })),
+      },
+      slices,
+      adapter_manifests: [python.manifest],
+    }).sort(),
     ["CALLS", "IMPORTS", "IMPORTS", "INHERITS"].sort(),
   );
 });

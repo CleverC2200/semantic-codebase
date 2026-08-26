@@ -61,6 +61,17 @@ test("TypeScript candidates preserve aliases, calls and heritage without target 
   assert.equal(new Set(Array.from({ length: 3 }, () => canonicalHash(extract(new TypeScriptTreeSitterAdapter(), source, "typescript", "src/main.ts")))).size, 1);
 });
 
+test("Candidate identity includes its repository-relative file path", () => {
+  const source = "export function same() {}\n";
+  const first = extract(new TypeScriptTreeSitterAdapter(), source, "typescript", "src/first.ts");
+  const second = extract(new TypeScriptTreeSitterAdapter(), source, "typescript", "src/second.ts");
+
+  assert.notDeepEqual(
+    first.relation_candidates.map((candidate) => candidate.local_id),
+    second.relation_candidates.map((candidate) => candidate.local_id),
+  );
+});
+
 test("Python candidates preserve relative imports, aliases, calls and bases", () => {
   const source = [
     "import pkg.mod as pm, plain",

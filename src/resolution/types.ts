@@ -2,7 +2,6 @@ import type {
   Diagnostic,
   Language,
   RelationCandidate,
-  RelationKind,
   SyntaxAdapterManifest,
   SyntaxSlice,
 } from "../contract/types.js";
@@ -31,12 +30,8 @@ export type ResolvedEndpoint =
   | { kind: "definition"; file_path: string; definition_local_id: string };
 
 export interface ResolvedRelationDraft {
-  local_id: string;
   candidate_local_id: string;
-  kind: Exclude<RelationKind, "CONTAINS">;
-  source: ResolvedEndpoint;
   target: ResolvedEndpoint;
-  evidence_local_ids: string[];
   derivation: string[];
 }
 

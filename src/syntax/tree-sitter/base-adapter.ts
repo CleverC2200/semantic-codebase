@@ -248,6 +248,7 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
     const source_local_ref = nearestDefinitionReference(context.definitions, span);
     const local_id = canonicalHash({
       type: "relation_candidate",
+      file_path: context.input.relative_path,
       kind,
       source_local_ref,
       target_hint: targetHint,
