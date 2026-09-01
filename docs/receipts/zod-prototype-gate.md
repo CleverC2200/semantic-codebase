@@ -16,6 +16,8 @@
 - 同一输入连续 10 次 graph hash：一致。
 - CLI/MCP canonical result：一致。
 - 默认 status/Definition/traverse/paths/Evidence 查询：均低于 2 秒。
+- 固定 Relation Gold：`util.getValidEnumValues --CALLS--> util.objectValues`，无缺失或额外 Relation。
+- Receipt 同时记录 Manifest digest、Canonical/Adapter Profile、可复现命令、SQLite Store 大小和 Gate 进程峰值内存。
 
 ## 用户链路证据
 
@@ -58,3 +60,5 @@ decision = insufficient_static_evidence
 - `.workspace/acceptance/zod-prototype/prototype.sqlite`
 
 这些工件只保留在本地，不进入公开 Git 历史。
+
+`receipt.json` 是机器可读的完整收据；本文只保留稳定结论，运行时间、Store bytes 和峰值内存以最近一次本地生成的 JSON 为准。

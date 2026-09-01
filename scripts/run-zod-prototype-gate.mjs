@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ import {
   callMcpTool,
   canonicalJson,
   discoverRepository,
+  repositoryManifestSummary,
   runCli,
   sha256Text,
 } from "../dist/index.js";
@@ -19,18 +20,24 @@ const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const zodRoot = path.join(projectRoot, "references/zod/packages/zod/src/v3");
 const outputRoot = path.join(projectRoot, ".workspace/acceptance/zod-prototype");
 const storePath = path.join(outputRoot, "prototype.sqlite");
-const expectedCorpus = { files: 83, bytes: 489_551 };
+const expectedCorpus = {
+  files: 83,
+  bytes: 489_551,
+  manifest_digest: "4c7c8f212b91149f6a20516ab2caa8be0d4bef5e2d91486ee60dff3e4dc50f4f",
+};
 
 rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(outputRoot, { recursive: true });
 
 const discovered = discoverRepository(zodRoot, storePath);
-const corpusBytes = discovered.source.files.reduce((total, file) => total + file.source_bytes.byteLength, 0);
-assert(discovered.source.files.length === expectedCorpus.files, "Zod v3 file count drifted");
-assert(corpusBytes === expectedCorpus.bytes, "Zod v3 byte count drifted");
+const manifest = repositoryManifestSummary(discovered.source);
+assert(manifest.file_count === expectedCorpus.files, "Zod v3 file count drifted");
+assert(manifest.byte_length === expectedCorpus.bytes, "Zod v3 byte count drifted");
+assert(manifest.digest === expectedCorpus.manifest_digest, "Zod v3 Manifest digest drifted");
 
 const timings = {};
 const indexed = await timed("index", () => cli(["index", "--repo", zodRoot, "--store", storePath]));
+const indexPhaseMaxRssKib = process.resourceUsage().maxRSS;
 const status = await timed("status", () => cli(["status", "--repo", zodRoot, "--store", storePath]));
 assert(status.freshness.status === "fresh", "Indexed Zod Snapshot is not fresh");
 assert(indexed.coverage.status === "ready", "Zod Snapshot is not Ready");
@@ -116,6 +123,28 @@ const invalidExportSources = state.graph.relations.filter((relation) => {
   if (relation.kind !== "EXPORTS" || relation.source.kind === "source_file") return false;
   return definitionsByKey.get(relation.source.definition_key)?.kind !== "module";
 });
+const relationGoldExpected = [{
+  kind: "CALLS",
+  source: "util.getValidEnumValues",
+  target: "util.objectValues",
+  evidence_count: 1,
+}];
+const relationGoldActual = state.graph.relations
+  .filter((relation) =>
+    relation.kind === "CALLS" &&
+    relation.source.kind === "definition" &&
+    relation.source.definition_key === sourceDefinition.definition_key,
+  )
+  .map((relation) => ({
+    kind: relation.kind,
+    source: definitionsByKey.get(relation.source.definition_key)?.qualified_name ?? null,
+    target: relation.target.kind === "definition"
+      ? definitionsByKey.get(relation.target.definition_key)?.qualified_name ?? null
+      : null,
+    evidence_count: relation.evidence_ids.length,
+  }))
+  .sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right)));
+assert(canonicalJson(relationGoldActual) === canonicalJson(relationGoldExpected), "Zod Relation Gold drifted");
 assert(forbiddenSelfEdges.length === 0, "Zod contains forbidden self-edges");
 assert(invalidExportSources.length === 0, "Zod contains invalid EXPORTS sources");
 
@@ -140,12 +169,42 @@ const receipt = {
     root: "packages/zod/src/v3",
     files: expectedCorpus.files,
     bytes: expectedCorpus.bytes,
+    manifest_digest: manifest.digest,
+  },
+  commands: {
+    gate: "npm run prototype:zod",
+    cli: [
+      "scb index --repo references/zod/packages/zod/src/v3 --store .workspace/acceptance/zod-prototype/prototype.sqlite",
+      "scb status --repo references/zod/packages/zod/src/v3 --store .workspace/acceptance/zod-prototype/prototype.sqlite",
+      "scb definitions find --repo references/zod/packages/zod/src/v3 --store .workspace/acceptance/zod-prototype/prototype.sqlite --query getValidEnumValues --require-fresh",
+      "scb graph traverse --repo references/zod/packages/zod/src/v3 --store .workspace/acceptance/zod-prototype/prototype.sqlite --start-definition-key <definition_key> --relation-kinds CALLS --require-fresh",
+      "scb graph paths --repo references/zod/packages/zod/src/v3 --store .workspace/acceptance/zod-prototype/prototype.sqlite --start-definition-key <definition_key> --end-definition-key <definition_key> --relation-kinds CALLS --require-fresh",
+      "scb evidence get --repo references/zod/packages/zod/src/v3 --store .workspace/acceptance/zod-prototype/prototype.sqlite --evidence-id <evidence_id> --require-fresh",
+    ],
+    mcp_tool: "semantic_codebase_find_definitions",
+  },
+  runtime: {
+    node: process.version,
+    platform: process.platform,
+    architecture: process.arch,
+    index_phase_max_rss_kib: indexPhaseMaxRssKib,
+    gate_process_max_rss_kib: process.resourceUsage().maxRSS,
   },
   snapshot: {
     snapshot_id: indexed.snapshot_id,
     graph_hash: indexed.graph_hash,
     coverage: indexed.coverage,
     freshness: status.freshness.status,
+    profile: {
+      canonical_ir_version: state.canonical_ir_version,
+      index_config_digest: state.index_config_digest,
+      adapter_profile_digest: state.adapter_profile_digest,
+      adapters: state.adapter_manifests,
+    },
+  },
+  store: {
+    path: ".workspace/acceptance/zod-prototype/prototype.sqlite",
+    bytes: statSync(storePath).size,
   },
   demonstrations: {
     definition: summarizeDefinition(sourceDefinition),
@@ -161,12 +220,17 @@ const receipt = {
       source_truncated: evidence.data.source.truncated,
     },
     static_refusal: staticRefusal,
+    relation_gold: {
+      expected: relationGoldExpected,
+      actual: relationGoldActual,
+    },
   },
   gates: {
     ready: indexed.coverage.status === "ready",
     fresh: status.freshness.status === "fresh",
     forbidden_self_edges: forbiddenSelfEdges.length,
     invalid_export_sources: invalidExportSources.length,
+    relation_gold: canonicalJson(relationGoldActual) === canonicalJson(relationGoldExpected),
     store_round_trip: state.graph.graph_hash === indexed.graph_hash,
     incremental_noop_parity: synced.snapshot_id === indexed.snapshot_id,
     ten_run_determinism: new Set(graphHashes).size === 1,
