@@ -1,6 +1,6 @@
 # Syntax Extraction V0.1 性能 Gate
 
-状态：Accepted
+状态：V0.1 Accepted；V0.2 Follow-up Reopened
 
 日期：2026-08-24
 
@@ -45,3 +45,16 @@
 - 产品引入 daemon/watcher 后，长时间增量 soak 显示 RSS 持续增长；
 - profiler 证明后处理、Resolver 或 Canonicalizer 的具体规则成为主要预算瓶颈；
 - 任一优化都必须继续通过增量/全量规范图 parity，不得改变事实、排序、Coverage 或 Diagnostic。
+
+## 2026-09-01 V0.2 产品化复测
+
+实现基线 `bafb996` 上重新执行同一命令。当前源码 corpus 已增长到 32 个文件、188,938 bytes，因此本次结果不能覆盖或伪装成原 19 文件 V0.1 冻结基线；单独保存为 [syntax-performance-productization-followup.json](../receipts/syntax-performance-productization-followup.json)。
+
+| Gate | 原预算 | V0.2 实测 p95 / peak | 结果 |
+| --- | ---: | ---: | --- |
+| 全量 Pipeline | ≤ 150 ms | 215.387 ms | 未通过 |
+| 单文件增量 | ≤ 75 ms | 103.436 ms | 未通过 |
+| 隔离 worker 最大 RSS | ≤ 192 MiB | 197,504 KiB | 未通过 |
+| Canonical Coverage | `ready` | `ready` | 通过 |
+
+决定为 `reopen_s4_measurement`：当前版本不得继续引用 V0.1 数据声称产品化基线仍在预算内。下一步应先冻结具有明确 revision 的代表性公开 corpus，并分别定位后处理/规范化和增量阶段的全仓 Resolver/Canonicalizer 成本；只有固定 corpus 或产品 SLA 再次证明具体瓶颈后，才拆 worker、缓存或 native runtime 优化票。

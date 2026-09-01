@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-01",
+  "implementation_revision": "bafb996",
+  "command": "npm run benchmark:syntax",
+  "environment": {
+    "os": "macOS",
+    "architecture": "arm64",
+    "node": "v24.14.1"
+  },
+  "corpus": {
+    "roots": [
+      "src/**/*.ts",
+      "benchmark/corpus/python/**/*.py"
+    ],
+    "manifest_digest": "c9bd2db19f500fce4e122ea175fed932cc04c7bf538e614ed87fbaae2e0f8be1",
+    "files": 32,
+    "bytes": 188938
+  },
+  "iterations": 9,
+  "process_model": "one isolated worker process per measured build",
+  "metrics_ms": {
+    "parse_only": { "median": 10.967, "p95": 11.337 },
+    "query_only": { "median": 8.86, "p95": 9.229 },
+    "postprocess_normalize_estimate": { "median": 97.393, "p95": 103.044 },
+    "syntax_extract": { "median": 117.037, "p95": 122.964 },
+    "resolver": { "median": 40.294, "p95": 42.282 },
+    "canonicalizer": { "median": 30.598, "p95": 32.35 },
+    "full_pipeline": { "median": 180.524, "p95": 215.387 },
+    "single_file_incremental": { "median": 81.919, "p95": 103.436 }
+  },
+  "max_rss_kib": 197504,
+  "final_rss_kib": 195312,
+  "facts": {
+    "definitions": 288,
+    "relations": 558,
+    "unresolved_candidates": 1107,
+    "evidence": 1747,
+    "graph_hash": "1298fbda3f5a53a10ed4a6945b32d12223d6d46118f1988005bf24b11fc2a37d",
+    "coverage_status": "ready"
+  },
+  "budgets": {
+    "full_pipeline_p95_ms": 150,
+    "single_file_incremental_p95_ms": 75,
+    "isolated_worker_max_rss_kib": 196608,
+    "required_coverage_status": "ready"
+  },
+  "gate_results": {
+    "full_pipeline": false,
+    "single_file_incremental": false,
+    "isolated_worker_memory": false,
+    "coverage": true
+  },
+  "decision": "reopen_s4_measurement",
+  "notes": [
+    "The V0.1 receipt remains tied to revision 07267e5 and is not overwritten by this larger mutable source corpus.",
+    "This follow-up records a failed comparison against the original budgets; it does not raise thresholds or authorize speculative optimization.",
+    "Freeze a representative public corpus and product indexing SLA before selecting worker, cache, old-tree, or native-runtime work."
+  ]
+}
