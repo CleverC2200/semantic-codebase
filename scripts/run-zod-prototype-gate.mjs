@@ -123,6 +123,10 @@ const invalidExportSources = state.graph.relations.filter((relation) => {
   if (relation.kind !== "EXPORTS" || relation.source.kind === "source_file") return false;
   return definitionsByKey.get(relation.source.definition_key)?.kind !== "module";
 });
+const relationGoldScope = {
+  source_definition: "util.getValidEnumValues",
+  relation_kinds: ["CALLS"],
+};
 const relationGoldExpected = [{
   kind: "CALLS",
   source: "util.getValidEnumValues",
@@ -221,6 +225,7 @@ const receipt = {
     },
     static_refusal: staticRefusal,
     relation_gold: {
+      scope: relationGoldScope,
       expected: relationGoldExpected,
       actual: relationGoldActual,
     },
