@@ -2,6 +2,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import type { CanonicalCoverage } from "../canonicalization/types.js";
+import { DEFINITION_KINDS } from "../contract/types.js";
 import { sha256Bytes } from "../contract/hash.js";
 import type {
   DefinitionFindInput,
@@ -31,6 +32,12 @@ export class DefinitionQueryService {
 
   findDefinitions(input: DefinitionFindInput): QueryResult<{ definitions: ReturnType<DefinitionQueryStore["findDefinitions"]> }> {
     if (!input.query.trim()) throw new QueryError("INVALID_ARGUMENT", "query must not be empty");
+    if (input.kind && !DEFINITION_KINDS.includes(input.kind)) {
+      throw new QueryError("INVALID_ARGUMENT", `Unsupported Definition kind: ${input.kind}`);
+    }
+    if (input.file_path && !validRepositoryPath(input.file_path)) {
+      throw new QueryError("INVALID_ARGUMENT", `Invalid repository-relative file_path: ${input.file_path}`);
+    }
     const maxResults = bounded(input.max_results ?? DEFAULT_MAX_RESULTS, 1, MAX_RESULTS, "max_results");
     const scope = this.resolveScope(
       input.repository_id,
@@ -42,6 +49,10 @@ export class DefinitionQueryService {
       input.repository_id,
       scope.snapshot_id,
       input.query.normalize("NFC"),
+      {
+        ...(input.kind ? { kind: input.kind } : {}),
+        ...(input.file_path ? { file_path: input.file_path } : {}),
+      },
       maxResults + 1,
     );
     const truncated = definitions.length > maxResults;
@@ -110,6 +121,10 @@ export class DefinitionQueryService {
       coverage: snapshot.coverage,
     };
   }
+}
+
+function validRepositoryPath(value: string): boolean {
+  return Boolean(value) && !path.posix.isAbsolute(value) && path.posix.normalize(value) === value && !value.startsWith("../");
 }
 
 function result<T>(

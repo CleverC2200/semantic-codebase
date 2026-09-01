@@ -4,7 +4,12 @@ import readline from "node:readline";
 import { pathToFileURL } from "node:url";
 
 import { canonicalJson } from "../contract/hash.js";
-import type { RelationKind } from "../contract/types.js";
+import {
+  DEFINITION_KINDS,
+  RELATION_KINDS,
+  type DefinitionKind,
+  type RelationKind,
+} from "../contract/types.js";
 import { DefinitionQueryService } from "../query/definition-query.js";
 import { GraphQueryService } from "../query/graph-query.js";
 import { QueryError } from "../query/types.js";
@@ -30,9 +35,18 @@ interface ToolResult {
   isError?: boolean;
 }
 
+type JsonSchemaValue = string | number | boolean;
+type JsonSchemaProperty = {
+  type: string;
+  enum?: JsonSchemaValue[];
+  items?: { type: string; enum?: JsonSchemaValue[] };
+  minimum?: number;
+  maximum?: number;
+};
+
 type JsonSchema = {
   type: "object";
-  properties: Record<string, { type: string; enum?: string[]; items?: { type: string }; minimum?: number; maximum?: number }>;
+  properties: Record<string, JsonSchemaProperty>;
   required: string[];
   additionalProperties: false;
 };
@@ -46,6 +60,8 @@ export const MCP_TOOLS: Array<{
   tool("semantic_codebase_status", "读取 Repository 当前 Ready Snapshot 与 Freshness。", {}, []),
   tool("semantic_codebase_find_definitions", "按名称或 qualified name 查找 Definition。", {
     query: { type: "string" },
+    kind: { type: "string", enum: [...DEFINITION_KINDS] },
+    file_path: { type: "string" },
     max_results: { type: "number", minimum: 1, maximum: 500 },
   }, ["query"]),
   tool("semantic_codebase_get_definition", "按 Definition Key 读取 Definition。", {
@@ -57,17 +73,18 @@ export const MCP_TOOLS: Array<{
   }, ["evidence_id"]),
   tool("semantic_codebase_traverse", "按预算和方向遍历 Definition Graph。", {
     start_definition_key: { type: "string" },
-    direction: { type: "string", enum: ["outgoing", "incoming", "both"] },
-    relation_kinds: { type: "array", items: { type: "string" } },
+    direction: { type: "string", enum: ["out", "in", "both", "outgoing", "incoming"] },
+    relation_kinds: { type: "array", items: { type: "string", enum: [...RELATION_KINDS] } },
     max_depth: { type: "number", minimum: 0, maximum: 8 },
     max_nodes: { type: "number", minimum: 1, maximum: 5000 },
+    max_results: { type: "number", minimum: 1, maximum: 5000 },
     timeout_ms: { type: "number", minimum: 1, maximum: 10000 },
   }, ["start_definition_key"]),
   tool("semantic_codebase_find_paths", "查找两个 Definition 之间的有预算简单路径。", {
     start_definition_key: { type: "string" },
     end_definition_key: { type: "string" },
-    direction: { type: "string", enum: ["outgoing", "incoming", "both"] },
-    relation_kinds: { type: "array", items: { type: "string" } },
+    direction: { type: "string", enum: ["out", "in", "both", "outgoing", "incoming"] },
+    relation_kinds: { type: "array", items: { type: "string", enum: [...RELATION_KINDS] } },
     max_depth: { type: "number", minimum: 0, maximum: 8 },
     max_nodes: { type: "number", minimum: 1, maximum: 5000 },
     max_paths: { type: "number", minimum: 1, maximum: 100 },
@@ -135,6 +152,8 @@ export async function callMcpTool(name: string, rawArguments: unknown): Promise<
         return success(definitions.findDefinitions({
           ...scope,
           query: args.query as string,
+          ...(args.kind !== undefined ? { kind: args.kind as DefinitionKind } : {}),
+          ...(args.file_path !== undefined ? { file_path: args.file_path as string } : {}),
           ...(args.max_results !== undefined ? { max_results: args.max_results as number } : {}),
         }));
       }
@@ -153,10 +172,11 @@ export async function callMcpTool(name: string, rawArguments: unknown): Promise<
       if (args.relation_kinds) validateRelationKinds(args.relation_kinds as string[]);
       const graphOptions = {
         ...scope,
-        ...(args.direction ? { direction: args.direction as "outgoing" | "incoming" | "both" } : {}),
+        ...(args.direction ? { direction: args.direction as "out" | "in" | "outgoing" | "incoming" | "both" } : {}),
         ...(args.relation_kinds ? { relation_kinds: args.relation_kinds as RelationKind[] } : {}),
         ...(args.max_depth !== undefined ? { max_depth: args.max_depth as number } : {}),
         ...(args.max_nodes !== undefined ? { max_nodes: args.max_nodes as number } : {}),
+        ...(args.max_results !== undefined ? { max_results: args.max_results as number } : {}),
         ...(args.timeout_ms !== undefined ? { timeout_ms: args.timeout_ms as number } : {}),
       };
       if (name === "semantic_codebase_traverse") {
@@ -226,6 +246,7 @@ function tool(
       properties: {
         repo: { type: "string" },
         store: { type: "string" },
+        schema_version: { type: "number", enum: [1] },
         snapshot: { type: "string" },
         require_fresh: { type: "boolean" },
         ...commandProperties,
@@ -243,9 +264,7 @@ function tool(
 }
 
 function validateRelationKinds(values: string[]): void {
-  const allowed = new Set([
-    "CONTAINS", "IMPORTS", "EXPORTS", "CALLS", "INHERITS", "IMPLEMENTS", "REFERENCES",
-  ]);
+  const allowed = new Set<string>(RELATION_KINDS);
   if (values.some((value) => !allowed.has(value))) {
     throw new QueryError("INVALID_ARGUMENT", "relation_kinds contains an unsupported Relation kind");
   }
@@ -265,6 +284,9 @@ function validateArguments(schema: JsonSchema, value: unknown): Record<string, u
     if (property.type === "array") {
       if (!Array.isArray(argument) || argument.some((item) => typeof item !== property.items?.type)) {
         throw new QueryError("INVALID_ARGUMENT", `${key} must be an array of ${property.items?.type}`);
+      }
+      if (property.items?.enum && argument.some((item) => !property.items!.enum!.includes(item as JsonSchemaValue))) {
+        throw new QueryError("INVALID_ARGUMENT", `${key} contains an unsupported value`);
       }
     } else if (typeof argument !== property.type) {
       throw new QueryError("INVALID_ARGUMENT", `${key} must be ${property.type}`);

@@ -10,6 +10,7 @@ import {
   sha256Bytes,
   type Language,
   type RepositorySource,
+  type SyntaxAdapter,
 } from "../../src/index.js";
 
 type FixtureFile = [string, Language, string];
@@ -42,6 +43,37 @@ function indexer(options?: { tsQuerySuffix?: string }) {
       : {},
   );
   return new RepositoryIndexer({ adapters: [ts, new PythonTreeSitterAdapter()] });
+}
+
+function indexerWithProfile(
+  profile: { grammarDigest?: string; indexConfig?: unknown },
+): RepositoryIndexer {
+  const typescript = adapterWithGrammarDigest(
+    new TypeScriptTreeSitterAdapter(),
+    profile.grammarDigest,
+  );
+  return new RepositoryIndexer({
+    adapters: [typescript, new PythonTreeSitterAdapter()],
+    ...(profile.indexConfig !== undefined ? { index_config: profile.indexConfig } : {}),
+  });
+}
+
+function adapterWithGrammarDigest(adapter: SyntaxAdapter, grammarDigest?: string): SyntaxAdapter {
+  if (!grammarDigest) return adapter;
+  const manifest = {
+    ...adapter.manifest,
+    grammar: { ...adapter.manifest.grammar, digest: grammarDigest },
+  };
+  return {
+    manifest,
+    extract(input) {
+      const slice = adapter.extract(input);
+      return {
+        ...slice,
+        evidence: slice.evidence.map((item) => ({ ...item, grammar_digest: grammarDigest })),
+      };
+    },
+  };
 }
 
 const baseFiles: FixtureFile[] = [
@@ -94,6 +126,27 @@ test("Adapter query/config change invalidates reusable slices", () => {
 
   assert.deepEqual(result.receipt.extracted_files, ["src/dep.ts", "src/main.ts"]);
   assert.deepEqual(result.receipt.reused_files, ["pkg/helpers.py", "pkg/main.py"]);
+});
+
+test("grammar profile changes invalidate language slices and preserve full-build parity", () => {
+  const previous = indexerWithProfile({}).buildFull(source(baseFiles)).state;
+  const changed = indexerWithProfile({ grammarDigest: "test-grammar-v2" });
+  const incremental = changed.buildIncremental(previous, source(baseFiles));
+  const full = changed.buildFull(source(baseFiles));
+
+  assert.equal(canonicalJson(incremental.state.graph), canonicalJson(full.state.graph));
+  assert.deepEqual(incremental.receipt.extracted_files, ["src/dep.ts", "src/main.ts"]);
+  assert.deepEqual(incremental.receipt.reused_files, ["pkg/helpers.py", "pkg/main.py"]);
+});
+
+test("index config changes preserve incremental and full graph parity with a new Snapshot identity", () => {
+  const previous = indexerWithProfile({}).buildFull(source(baseFiles)).state;
+  const changed = indexerWithProfile({ indexConfig: { exclusions: ["generated"] } });
+  const incremental = changed.buildIncremental(previous, source(baseFiles));
+  const full = changed.buildFull(source(baseFiles));
+
+  assert.notEqual(incremental.state.snapshot_id, previous.snapshot_id);
+  assert.equal(canonicalJson(incremental.state.graph), canonicalJson(full.state.graph));
 });
 
 test("Canonical IR and index config participate in Snapshot identity", () => {

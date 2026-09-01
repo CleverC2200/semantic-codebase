@@ -71,6 +71,24 @@ test("MCP exposes six read-only tools with closed input schemas", async () => {
   assert.ok(MCP_TOOLS.every((tool) => tool.inputSchema.additionalProperties === false));
   assert.ok(MCP_TOOLS.every((tool) => tool.annotations.readOnlyHint === true));
   assert.ok(MCP_TOOLS.every((tool) => !/index|sync/.test(tool.name)));
+  const traverse = MCP_TOOLS.find((tool) => tool.name === "semantic_codebase_traverse")!;
+  assert.deepEqual(traverse.inputSchema.properties.relation_kinds.items?.enum, [
+    "CONTAINS", "IMPORTS", "EXPORTS", "CALLS", "INHERITS", "IMPLEMENTS", "REFERENCES",
+  ]);
+});
+
+test("MCP negotiates unsupported protocol versions and rejects unsupported tool schema versions", async () => {
+  const initialized = await handleMcpRequest({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: { protocolVersion: "2099-01-01", capabilities: {}, clientInfo: { name: "test", version: "1" } },
+  });
+  assert.equal((initialized?.result as any).protocolVersion, "2025-11-25");
+
+  const rejected = await callMcpTool("semantic_codebase_status", { repo: "/tmp", schema_version: 2 });
+  assert.equal(rejected.isError, true);
+  assert.equal((rejected.structuredContent as any).error.code, "INVALID_ARGUMENT");
 });
 
 test("MCP structuredContent matches CLI Query Module results without modifying the Store", async () => {
@@ -85,6 +103,16 @@ test("MCP structuredContent matches CLI Query Module results without modifying t
   ]);
   const mcpFound = await mcp("semantic_codebase_find_definitions", { ...common, query: "originNode" });
   assert.deepEqual(mcpFound, cliFound);
+  assert.deepEqual(
+    await mcp("semantic_codebase_find_definitions", {
+      ...common,
+      query: "originNode",
+      kind: "function",
+      file_path: "src/main.ts",
+      schema_version: 1,
+    }),
+    cliFound,
+  );
   const origin = cliFound.data.definitions[0];
   const target = (await cli([
     "definitions", "find", "--repo", root, "--store", store, "--query", "targetNode",
@@ -117,6 +145,16 @@ test("MCP structuredContent matches CLI Query Module results without modifying t
     relation_kinds: ["CALLS"],
   });
   assert.deepEqual(withoutElapsedBudget(mcpTraverse), withoutElapsedBudget(cliTraverse));
+  const limited = await mcp("semantic_codebase_traverse", {
+    ...common,
+    start_definition_key: origin.definition_key,
+    relation_kinds: ["CALLS"],
+    direction: "out",
+    max_nodes: 10,
+    max_results: 1,
+  });
+  assert.equal(limited.completeness.reason, "max_results");
+  assert.equal(limited.data.nodes.length, 1);
 
   const cliPaths = await cli([
     "graph", "paths", "--repo", root, "--store", store,

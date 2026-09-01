@@ -84,6 +84,29 @@ test("CLI rejects options that do not belong to the selected command", async () 
   assert.match(result.output.error.message, /Unknown option.*--query/);
 });
 
+test("definitions find filters by Definition kind and exact repository-relative file path", async () => {
+  const { root, store } = fixture();
+  writeFileSync(
+    path.join(root, "src", "other.ts"),
+    "export class SharedName {}\nexport function helper() {}\n",
+  );
+  writeFileSync(
+    path.join(root, "src", "main.ts"),
+    "export function SharedName() {}\nexport function helper() {}\n",
+  );
+  await invoke(["index", "--repo", root, "--store", store]);
+
+  const result = await invoke([
+    "definitions", "find", "--repo", root, "--store", store,
+    "--query", "SharedName", "--kind", "function", "--file-path", "src/main.ts",
+  ]);
+  assert.equal(result.code, 0);
+  assert.deepEqual(
+    result.output.data.definitions.map((definition: any) => [definition.kind, definition.file_path]),
+    [["function", "src/main.ts"]],
+  );
+});
+
 test("status, require_fresh and sync expose Manifest freshness without hiding stale data", async () => {
   const { root, store } = fixture();
   const first = await invoke(["index", "--repo", root, "--store", store]);
@@ -165,6 +188,20 @@ test("graph traverse performs deterministic budgeted BFS over Definition relatio
   assert.equal(nodeLimited.output.completeness.truncated, true);
   assert.equal(nodeLimited.output.completeness.reason, "max_nodes");
   assert.equal(nodeLimited.output.data.nodes.length, 1);
+
+  const resultLimited = await invoke([
+    ...arguments_, "--max-nodes", "10", "--max-results", "1",
+  ]);
+  assert.equal(resultLimited.output.completeness.reason, "max_results");
+  assert.equal(resultLimited.output.data.nodes.length, 1);
+  assert.equal(resultLimited.output.data.relations.length, 0);
+
+  const incoming = await invoke([
+    "graph", "traverse", "--repo", root, "--store", store,
+    "--start-definition-key", first.output.data.nodes[1].definition.definition_key,
+    "--relation-kinds", "CALLS", "--direction", "in",
+  ]);
+  assert.equal(incoming.output.data.nodes.some((node: any) => node.definition.name === "root"), true);
 });
 
 test("graph paths returns ordered shortest simple paths with explicit path budgets", async () => {

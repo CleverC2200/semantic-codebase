@@ -1,20 +1,18 @@
 export type Language = "typescript" | "python";
 
-export type DefinitionKind =
-  | "module"
-  | "class"
-  | "interface"
-  | "function"
-  | "method";
+export const DEFINITION_KINDS = ["module", "class", "interface", "function", "method"] as const;
+export type DefinitionKind = (typeof DEFINITION_KINDS)[number];
 
-export type RelationKind =
-  | "CONTAINS"
-  | "IMPORTS"
-  | "EXPORTS"
-  | "CALLS"
-  | "INHERITS"
-  | "IMPLEMENTS"
-  | "REFERENCES";
+export const RELATION_KINDS = [
+  "CONTAINS",
+  "IMPORTS",
+  "EXPORTS",
+  "CALLS",
+  "INHERITS",
+  "IMPLEMENTS",
+  "REFERENCES",
+] as const;
+export type RelationKind = (typeof RELATION_KINDS)[number];
 
 export interface ByteSpan {
   start_byte: number;

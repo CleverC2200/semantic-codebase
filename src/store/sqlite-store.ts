@@ -11,7 +11,7 @@ import type {
   CanonicalRelation,
 } from "../canonicalization/types.js";
 import type { RelationKind } from "../contract/types.js";
-import type { TraversalDirection } from "../query/types.js";
+import type { DefinitionFilter, NormalizedTraversalDirection } from "../query/types.js";
 import type { IndexState } from "../indexing/types.js";
 import type { SnapshotStatus, SnapshotStore, SnapshotSummary } from "./types.js";
 import { SnapshotStoreError } from "./types.js";
@@ -213,18 +213,34 @@ export class SqliteSnapshotStore implements SnapshotStore {
     repositoryId: string,
     snapshotId: string,
     query: string,
+    filter: DefinitionFilter,
     limit: number,
   ): CanonicalDefinition[] {
     const ftsQuery = `"${query.replaceAll('"', '""')}"`;
+    const filterClauses: string[] = [];
+    const filterValues: string[] = [];
+    if (filter.kind) {
+      filterClauses.push("d.kind = ?");
+      filterValues.push(filter.kind);
+    }
+    if (filter.file_path) {
+      filterClauses.push("d.file_path = ?");
+      filterValues.push(filter.file_path);
+    }
+    const filterSql = filterClauses.length > 0 ? `AND ${filterClauses.join(" AND ")}` : "";
     const rows = this.database.prepare(
-      `SELECT d.definition_json
+      `WITH ranked_fts AS (
+         SELECT repository_id, snapshot_id, definition_key, bm25(definitions_fts) AS text_score
+         FROM definitions_fts
+         WHERE definitions_fts MATCH ?
+       )
+       SELECT d.definition_json
        FROM definitions d
-       WHERE d.repository_id = ? AND d.snapshot_id = ? AND (
-         d.qualified_name = ? OR d.name = ? OR d.qualified_name LIKE ? ESCAPE '\\' OR EXISTS (
-           SELECT 1 FROM definitions_fts f
-           WHERE f.repository_id = d.repository_id AND f.snapshot_id = d.snapshot_id
-             AND f.definition_key = d.definition_key AND definitions_fts MATCH ?
-         )
+       LEFT JOIN ranked_fts f
+         ON f.repository_id = d.repository_id AND f.snapshot_id = d.snapshot_id
+           AND f.definition_key = d.definition_key
+       WHERE d.repository_id = ? AND d.snapshot_id = ? ${filterSql} AND (
+         d.qualified_name = ? OR d.name = ? OR d.qualified_name LIKE ? ESCAPE '\\' OR f.definition_key IS NOT NULL
        )
        ORDER BY
          CASE
@@ -233,15 +249,17 @@ export class SqliteSnapshotStore implements SnapshotStore {
            WHEN d.qualified_name LIKE ? ESCAPE '\\' THEN 2
            ELSE 3
          END,
+         COALESCE(f.text_score, 0),
          d.definition_key
        LIMIT ?`,
     ).all(
+      ftsQuery,
       repositoryId,
       snapshotId,
+      ...filterValues,
       query,
       query,
       `${escapeLike(query)}%`,
-      ftsQuery,
       query,
       query,
       `${escapeLike(query)}%`,
@@ -270,7 +288,7 @@ export class SqliteSnapshotStore implements SnapshotStore {
     repositoryId: string,
     snapshotId: string,
     definitionKeys: string[],
-    direction: TraversalDirection,
+    direction: NormalizedTraversalDirection,
     relationKinds: RelationKind[],
   ): CanonicalRelation[] {
     if (definitionKeys.length === 0) return [];

@@ -4,7 +4,7 @@ import type {
   CanonicalEvidence,
   CanonicalRelation,
 } from "../canonicalization/types.js";
-import type { RelationKind } from "../contract/types.js";
+import type { DefinitionKind, RelationKind } from "../contract/types.js";
 
 export type Freshness = "fresh" | "stale" | "unknown";
 
@@ -35,9 +35,16 @@ export interface DefinitionFindInput {
   repository_id: string;
   snapshot: "current_ready" | string;
   query: string;
+  kind?: DefinitionKind;
+  file_path?: string;
   max_results?: number;
   observed_manifest_digest?: string;
   require_fresh?: boolean;
+}
+
+export interface DefinitionFilter {
+  kind?: DefinitionKind;
+  file_path?: string;
 }
 
 export interface DefinitionGetInput {
@@ -69,12 +76,19 @@ export interface DefinitionQueryStore {
     source_manifest_digest: string;
     coverage: CanonicalCoverage;
   } | null;
-  findDefinitions(repositoryId: string, snapshotId: string, query: string, limit: number): CanonicalDefinition[];
+  findDefinitions(
+    repositoryId: string,
+    snapshotId: string,
+    query: string,
+    filter: DefinitionFilter,
+    limit: number,
+  ): CanonicalDefinition[];
   readDefinition(repositoryId: string, snapshotId: string, definitionKey: string): CanonicalDefinition | null;
   readEvidence(repositoryId: string, snapshotId: string, evidenceId: string): CanonicalEvidence | null;
 }
 
-export type TraversalDirection = "outgoing" | "incoming" | "both";
+export type TraversalDirection = "out" | "in" | "both" | "outgoing" | "incoming";
+export type NormalizedTraversalDirection = "outgoing" | "incoming" | "both";
 
 export interface TraverseInput {
   repository_id: string;
@@ -84,6 +98,7 @@ export interface TraverseInput {
   relation_kinds?: RelationKind[];
   max_depth?: number;
   max_nodes?: number;
+  max_results?: number;
   timeout_ms?: number;
   observed_manifest_digest?: string;
   require_fresh?: boolean;
@@ -126,7 +141,7 @@ export interface GraphQueryStore extends DefinitionQueryStore {
     repositoryId: string,
     snapshotId: string,
     definitionKeys: string[],
-    direction: TraversalDirection,
+    direction: NormalizedTraversalDirection,
     relationKinds: RelationKind[],
   ): CanonicalRelation[];
 }

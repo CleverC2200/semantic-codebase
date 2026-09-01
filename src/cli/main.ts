@@ -2,7 +2,7 @@
 import { pathToFileURL } from "node:url";
 
 import { canonicalJson } from "../contract/hash.js";
-import type { RelationKind } from "../contract/types.js";
+import { DEFINITION_KINDS, RELATION_KINDS, type DefinitionKind, type RelationKind } from "../contract/types.js";
 import { RepositoryIndexer } from "../indexing/indexer.js";
 import { IndexBuildError, type IndexBuildResult } from "../indexing/types.js";
 import { DefinitionQueryService } from "../query/definition-query.js";
@@ -79,6 +79,8 @@ function execute(
     return query.findDefinitions({
       ...scope,
       query: requiredOption(parsed, "query"),
+      ...(definitionKindOption(parsed) ? { kind: definitionKindOption(parsed) } : {}),
+      ...(parsed.options.get("file-path") ? { file_path: parsed.options.get("file-path") } : {}),
       ...(numberOption(parsed, "max-results") !== undefined
         ? { max_results: numberOption(parsed, "max-results") }
         : {}),
@@ -101,10 +103,11 @@ function execute(
     return new GraphQueryService(store).traverse({
       ...scope,
       start_definition_key: requiredOption(parsed, "start-definition-key"),
-      ...(parsed.options.get("direction") ? { direction: parsed.options.get("direction") as "outgoing" | "incoming" | "both" } : {}),
+      ...(parsed.options.get("direction") ? { direction: parsed.options.get("direction") as "out" | "in" | "outgoing" | "incoming" | "both" } : {}),
       ...(relationKindsOption(parsed) ? { relation_kinds: relationKindsOption(parsed) } : {}),
       ...(numberOption(parsed, "max-depth") !== undefined ? { max_depth: numberOption(parsed, "max-depth") } : {}),
       ...(numberOption(parsed, "max-nodes") !== undefined ? { max_nodes: numberOption(parsed, "max-nodes") } : {}),
+      ...(numberOption(parsed, "max-results") !== undefined ? { max_results: numberOption(parsed, "max-results") } : {}),
       ...(numberOption(parsed, "timeout-ms") !== undefined ? { timeout_ms: numberOption(parsed, "timeout-ms") } : {}),
     });
   }
@@ -113,7 +116,7 @@ function execute(
       ...scope,
       start_definition_key: requiredOption(parsed, "start-definition-key"),
       end_definition_key: requiredOption(parsed, "end-definition-key"),
-      ...(parsed.options.get("direction") ? { direction: parsed.options.get("direction") as "outgoing" | "incoming" | "both" } : {}),
+      ...(parsed.options.get("direction") ? { direction: parsed.options.get("direction") as "out" | "in" | "outgoing" | "incoming" | "both" } : {}),
       ...(relationKindsOption(parsed) ? { relation_kinds: relationKindsOption(parsed) } : {}),
       ...(numberOption(parsed, "max-depth") !== undefined ? { max_depth: numberOption(parsed, "max-depth") } : {}),
       ...(numberOption(parsed, "max-nodes") !== undefined ? { max_nodes: numberOption(parsed, "max-nodes") } : {}),
@@ -204,7 +207,7 @@ function validateCommandOptions(parsed: ParsedArguments): void {
     index: common,
     sync: common,
     status: common,
-    "definitions find": [...queryScope, "query", "max-results"],
+    "definitions find": [...queryScope, "query", "kind", "file-path", "max-results"],
     "definition get": [...queryScope, "definition-key"],
     "evidence get": [...queryScope, "evidence-id", "source-bytes"],
     "graph traverse": [
@@ -214,6 +217,7 @@ function validateCommandOptions(parsed: ParsedArguments): void {
       "relation-kinds",
       "max-depth",
       "max-nodes",
+      "max-results",
       "timeout-ms",
     ],
     "graph paths": [
@@ -251,14 +255,21 @@ function numberOption(parsed: ParsedArguments, name: string): number | undefined
 function relationKindsOption(parsed: ParsedArguments): RelationKind[] | undefined {
   const raw = parsed.options.get("relation-kinds");
   if (!raw) return undefined;
-  const allowed = new Set<RelationKind>([
-    "CONTAINS", "IMPORTS", "EXPORTS", "CALLS", "INHERITS", "IMPLEMENTS", "REFERENCES",
-  ]);
+  const allowed = new Set<RelationKind>(RELATION_KINDS);
   const values = raw.split(",").filter(Boolean);
   if (values.length === 0 || values.some((value) => !allowed.has(value as RelationKind))) {
     throw new QueryError("INVALID_ARGUMENT", "--relation-kinds contains an unsupported Relation kind");
   }
   return values as RelationKind[];
+}
+
+function definitionKindOption(parsed: ParsedArguments): DefinitionKind | undefined {
+  const raw = parsed.options.get("kind");
+  if (!raw) return undefined;
+  if (!DEFINITION_KINDS.includes(raw as DefinitionKind)) {
+    throw new QueryError("INVALID_ARGUMENT", `Unsupported Definition kind: ${raw}`);
+  }
+  return raw as DefinitionKind;
 }
 
 function normalizeError(error: unknown): { code: string; message: string } {

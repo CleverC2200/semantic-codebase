@@ -10,6 +10,7 @@ import type {
   TraverseData,
   TraverseInput,
   TraversalDirection,
+  NormalizedTraversalDirection,
 } from "./types.js";
 import { QueryError } from "./types.js";
 
@@ -17,6 +18,8 @@ const DEFAULT_MAX_DEPTH = 3;
 const MAX_DEPTH = 8;
 const DEFAULT_MAX_NODES = 500;
 const MAX_NODES = 5_000;
+const DEFAULT_MAX_RESULTS = 5_000;
+const MAX_RESULTS = 5_000;
 const DEFAULT_TIMEOUT_MS = 2_000;
 const MAX_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_PATHS = 20;
@@ -37,12 +40,10 @@ export class GraphQueryService {
     if (!input.start_definition_key) {
       throw new QueryError("INVALID_ARGUMENT", "start_definition_key is required");
     }
-    const direction = input.direction ?? "outgoing";
-    if (!["outgoing", "incoming", "both"].includes(direction)) {
-      throw new QueryError("INVALID_ARGUMENT", `Invalid traversal direction: ${direction}`);
-    }
+    const direction = normalizeDirection(input.direction ?? "out");
     const maxDepth = bounded(input.max_depth ?? DEFAULT_MAX_DEPTH, 0, MAX_DEPTH, "max_depth");
     const maxNodes = bounded(input.max_nodes ?? DEFAULT_MAX_NODES, 1, MAX_NODES, "max_nodes");
+    const maxResults = bounded(input.max_results ?? DEFAULT_MAX_RESULTS, 1, MAX_RESULTS, "max_results");
     const timeoutMs = bounded(input.timeout_ms ?? DEFAULT_TIMEOUT_MS, 1, MAX_TIMEOUT_MS, "timeout_ms");
     const relationKinds = [...new Set(input.relation_kinds ?? [])].sort();
     const scope = resolveScope(this.store, input);
@@ -52,7 +53,7 @@ export class GraphQueryService {
         start_definition_key: input.start_definition_key,
         nodes: [],
         relations: [],
-      }, null, { max_depth: maxDepth, max_nodes: 0, timeout_ms: 0 }, []);
+      }, null, { max_depth: maxDepth, max_nodes: 0, max_results: 0, timeout_ms: 0 }, []);
     }
 
     const started = performance.now();
@@ -78,9 +79,16 @@ export class GraphQueryService {
       );
       const next = new Set<string>();
       for (const relation of adjacent) {
-        relations.set(relation.relation_key, relation);
+        let relationIncluded = false;
         for (const neighborKey of neighboringDefinitions(relation, frontier, direction)) {
-          if (definitions.has(neighborKey)) continue;
+          if (definitions.has(neighborKey)) {
+            relationIncluded = true;
+            continue;
+          }
+          if (definitions.size >= maxResults) {
+            truncationReason = "max_results";
+            break;
+          }
           if (definitions.size >= maxNodes) {
             truncationReason = "max_nodes";
             break;
@@ -89,8 +97,10 @@ export class GraphQueryService {
           if (definition) {
             definitions.set(neighborKey, { definition, depth: depth + 1 });
             next.add(neighborKey);
+            relationIncluded = true;
           }
         }
+        if (relationIncluded) relations.set(relation.relation_key, relation);
         if (truncationReason) break;
       }
       if (truncationReason) break;
@@ -126,6 +136,7 @@ export class GraphQueryService {
       {
         max_depth: nodes.reduce((maximum, node) => Math.max(maximum, node.depth), 0),
         max_nodes: nodes.length,
+        max_results: nodes.length,
         timeout_ms: Math.ceil(performance.now() - started),
       },
       [...nodes.flatMap((node) => node.definition.evidence_ids), ...edges.flatMap((edge) => edge.evidence_ids)],
@@ -136,10 +147,7 @@ export class GraphQueryService {
     if (!input.start_definition_key || !input.end_definition_key) {
       throw new QueryError("INVALID_ARGUMENT", "start_definition_key and end_definition_key are required");
     }
-    const direction = input.direction ?? "outgoing";
-    if (!["outgoing", "incoming", "both"].includes(direction)) {
-      throw new QueryError("INVALID_ARGUMENT", `Invalid traversal direction: ${direction}`);
-    }
+    const direction = normalizeDirection(input.direction ?? "out");
     const maxDepth = bounded(input.max_depth ?? DEFAULT_MAX_DEPTH, 0, MAX_DEPTH, "max_depth");
     const maxNodes = bounded(input.max_nodes ?? DEFAULT_MAX_NODES, 1, MAX_NODES, "max_nodes");
     const maxPaths = bounded(input.max_paths ?? DEFAULT_MAX_PATHS, 1, MAX_PATHS, "max_paths");
@@ -305,7 +313,7 @@ function relationSequence(relations: CanonicalRelation[]): string {
 function neighboringDefinitions(
   relation: CanonicalRelation,
   frontier: string[],
-  direction: TraversalDirection,
+  direction: NormalizedTraversalDirection,
 ): string[] {
   const frontierSet = new Set(frontier);
   const neighbors: string[] = [];
@@ -326,6 +334,13 @@ function neighboringDefinitions(
     neighbors.push(relation.source.definition_key);
   }
   return [...new Set(neighbors)].sort();
+}
+
+function normalizeDirection(direction: TraversalDirection): NormalizedTraversalDirection {
+  if (direction === "out" || direction === "outgoing") return "outgoing";
+  if (direction === "in" || direction === "incoming") return "incoming";
+  if (direction === "both") return "both";
+  throw new QueryError("INVALID_ARGUMENT", `Invalid traversal direction: ${direction}`);
 }
 
 function makeResult<T>(
