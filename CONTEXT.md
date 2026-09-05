@@ -51,6 +51,10 @@ _Avoid_: Relation、低置信度边
 由已注册且版本化的 namespace 定义、附着于分析对象并由 Evidence 支持的类型化属性。
 _Avoid_: 任意 JSON、Adapter metadata
 
+**Fact Schema**:
+规定一类 Fact 的适用对象、值结构、允许来源、基数和冲突语义的版本化契约；它描述语义而不是数据库表结构。
+_Avoid_: JSON 字段约定、Database Schema
+
 **Canonical IR**:
 所有 Source Adapter 与 Graph Store 共同遵守的最小 Definition、Relation、Fact 和 Evidence 模型，不暴露具体解析器或存储实现。
 _Avoid_: Database Schema、SCIP Index
@@ -62,6 +66,34 @@ _Avoid_: Source Adapter、Parser
 **Semantic Enricher**:
 在冻结的 Repository 和基础语法事实上补充仓库级解析结果与 Evidence 的可选分析角色。
 _Avoid_: Compiler Adapter、SCIP Adapter
+
+**Semantic Overlay**:
+绑定一个 Ready Snapshot、由通过准入的语义事实组成的不可变派生视图；它不修改或替换基础 Snapshot 中的结构事实。
+_Avoid_: Snapshot 补丁、可变语义缓存
+
+**Enrichment Profile**:
+一次 Semantic Overlay 构建所要求或允许的、带版本与配置的语义分析能力集合；它明确区分必需能力和可选能力。
+_Avoid_: Adapter 列表、自动降级配置
+
+**Enrichment Staging Batch**:
+Semantic Enricher 针对一个基础 Snapshot 提交的待准入语义断言、Evidence、Coverage 和诊断集合；它尚不是可查询的权威事实。
+_Avoid_: Semantic Overlay、Canonical Fact
+
+**Enrichment Admission**:
+把 Enrichment Staging Batch 按 Fact Schema、Evidence、Snapshot 作用域和来源权限进行校验的语义门禁；只有通过门禁的结果才能参与后续推导或进入 Semantic Overlay。
+_Avoid_: Adapter 成功、自动发布
+
+**Evidence Closure**:
+一条断言的全部证据引用都能在同一 Snapshot、已登记分析产物、指定 Execution 或本地 AI Invocation Receipt 中完整解析的状态。
+_Avoid_: 有源码链接、工具输出存在
+
+**Exhaustive Claim**:
+声称某个范围内不存在其他结果或已经覆盖全部结果的断言；它只有在对应分析范围 Coverage 完整时才成立。
+_Avoid_: 局部未发现、空查询结果
+
+**Claim Basis**:
+语义断言产生时不可改写的认识来源类别，用于区分 compiler-exact、static-possible、framework-heuristic、runtime-observed 与 LLM-inferred；它不是置信分数或自动升级等级。
+_Avoid_: Confidence、Priority、Authority Score
 
 **Adapter Profile**:
 一次 Snapshot 构建所要求的、带版本与配置的分析能力集合；它决定该 Snapshot 承诺具备哪些语言和关系能力。
@@ -91,9 +123,61 @@ _Avoid_: Response、搜索结果
 由 Definition 及其确定性结构关系构成的图，例如包含、调用、导入、继承、引用和读写。
 _Avoid_: Semantic Graph、Knowledge Graph
 
+**Behavior Fact**:
+绑定 Snapshot 并由 Evidence 支持的控制流、数据流或副作用事实；它的确定性等级与来源必须显式保留。
+_Avoid_: Relation、模型推测
+
+**Runtime Observation**:
+绑定某次执行与 Snapshot 的运行观测；它只证明该行为在观测范围内发生过，不证明其他可能路径不存在。
+_Avoid_: Runtime Fact、完整运行时真相
+
+**Application Flow**:
+从入口出发，用调用、决策、数据变化、副作用和结果组成的有 Evidence 支持的应用主线与分支；它不等同于最长调用链。
+_Avoid_: Call Path、业务流程图
+
+**Capability Candidate**:
+尚未经人工确认的 Capability 映射建议，必须保留来源、版本和 Evidence，不属于稳定业务模型。
+_Avoid_: Capability、自动业务标签
+
 **Context Package**:
 针对一个问题或任务，从图中选择并压缩出的有限上下文，包含相关定义、关系、源码证据和不确定性。
 _Avoid_: 搜索结果、文件列表
+
+**Query Intent**:
+自然语言问题经消歧后对应的受控理解目的，用于选择可审计查询而不是直接生成事实。
+_Avoid_: Prompt、用户原话
+
+**Query Plan**:
+从 Query Intent 派生并通过本地校验的受控查询步骤、范围和预算；AI 可以提出候选计划，但不能绕过校验直接成为可执行事实查询。
+_Avoid_: Prompt、模型思考过程
+
+**AI Provider**:
+按显式授权接收有限 Context Package，并提出 Query Plan 或答案表达的可选推理服务；其输出不是 Definition、Relation、Behavior Fact 或 Runtime Observation 的权威来源。
+_Avoid_: Fact Source、Semantic Enricher
+
+**Provider Invocation Grant**:
+用户针对单次 AI Provider 调用给出的数据外传授权，明确允许发送的 Context Package 与脱敏边界；它不会自动延续为仓库级永久许可。
+_Avoid_: Provider 配置、长期联网授权
+
+**Provider Request Bundle**:
+在 Provider Invocation Grant 下，从 Context Package 裁剪并脱敏得到的单次外传载荷；它只包含完成当前 AI 任务必要的问题、相对位置、证据片段、状态和未知边界。
+_Avoid_: Context Package、仓库副本、Prompt
+
+**AI Invocation Receipt**:
+使一次 AI Provider 调用可审计和可重新执行的本地记录，包含实际输入、运行档位、版本、结构化输出、资源用量与校验结果；它不包含认证信息或模型思考过程。
+_Avoid_: 对话记录、Benchmark Receipt、逐字复现保证
+
+**Assertion Status**:
+答案中单个结论的证据地位，用于区分确定、可能、已观测、推断和未知；它不是统计置信分数。
+_Avoid_: Confidence、正确率
+
+**Evidence Answer**:
+由 Context Package 生成的分层回答，每项结论都显式携带 Assertion Status、Evidence 引用和未覆盖边界。
+_Avoid_: Summary、LLM Answer
+
+**Evidence Validator**:
+在答案发布前校验 Assertion Status、Evidence 引用、Snapshot 作用域和 unknown 是否自洽的本地边界；校验失败的模型输出不得成为 Evidence Answer。
+_Avoid_: 事实生成器、模型评审
 
 **Evidence**:
 支持某项事实、推导或语义判断的可追溯来源，包括源码范围、测试、文档、配置和版本信息。

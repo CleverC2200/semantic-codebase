@@ -1,4 +1,5 @@
 import type { IndexState } from "../indexing/types.js";
+import type { SemanticFact, SemanticOverlay } from "../semantic/types.js";
 
 export type SnapshotStatus = "building" | "ready" | "failed" | "superseded";
 
@@ -17,6 +18,13 @@ export interface SnapshotStore {
   getCurrentReady(repositoryId: string): IndexState | null;
   getSnapshot(repositoryId: string, snapshotId: string): IndexState | null;
   getSnapshotSummary(repositoryId: string, snapshotId: string): SnapshotSummary | null;
+  publishSemanticOverlay(overlay: SemanticOverlay): void;
+  getSemanticOverlay(repositoryId: string, snapshotId: string): SemanticOverlay | null;
+  readSemanticFacts(
+    repositoryId: string,
+    snapshotId: string,
+    filter?: { file_path?: string; definition_key?: string; kind?: string; limit?: number },
+  ): SemanticFact[];
   close(): void;
 }
 

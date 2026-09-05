@@ -148,6 +148,68 @@ test("status, require_fresh and sync expose Manifest freshness without hiding st
   assert.equal(freshQuery.output.snapshot.freshness, "fresh");
 });
 
+test("semantic commands build, persist and query a fresh TypeScript overlay", async () => {
+  const { root, store } = fixture();
+  await invoke(["index", "--repo", root, "--store", store]);
+
+  const unavailable = await invoke(["semantic", "status", "--repo", root, "--store", store]);
+  assert.equal(unavailable.code, 0);
+  assert.equal(unavailable.output.semantic_overlay.status, "unavailable");
+
+  const built = await invoke(["semantic", "build", "--repo", root, "--store", store]);
+  assert.equal(built.code, 0, JSON.stringify(built.output));
+  assert.equal(built.output.coverage.status, "complete");
+  assert.ok(built.output.fact_count > 0);
+  assert.ok(built.output.evidence_count > 0);
+
+  const status = await invoke(["semantic", "status", "--repo", root, "--store", store]);
+  assert.equal(status.output.semantic_overlay.status, "ready");
+  assert.equal(status.output.semantic_overlay.overlay_hash, built.output.overlay_hash);
+
+  const facts = await invoke([
+    "semantic", "facts", "--repo", root, "--store", store,
+    "--file-path", "src/main.ts", "--kind", "symbol_type", "--require-fresh",
+  ]);
+  assert.equal(facts.code, 0, JSON.stringify(facts.output));
+  assert.equal(facts.output.snapshot.freshness, "fresh");
+  assert.ok(facts.output.data.facts.length > 0);
+  assert.ok(facts.output.data.facts.every((fact: any) => fact.kind === "symbol_type"));
+  assert.ok(facts.output.data.evidence.length > 0);
+
+  const tracePath = path.join(root, "trace.json");
+  writeFileSync(tracePath, JSON.stringify({
+    spans: [{
+      traceId: "trace-1",
+      spanId: "span-1",
+      name: "hello",
+      attributes: [
+        { key: "code.file.path", value: { stringValue: "src/main.ts" } },
+        { key: "code.function.name", value: { stringValue: "hello" } },
+      ],
+    }],
+  }));
+  const observed = await invoke([
+    "runtime", "import", "--repo", root, "--store", store, "--trace", tracePath,
+  ]);
+  assert.equal(observed.code, 0, JSON.stringify(observed.output));
+  assert.equal(observed.output.coverage.matched_span_count, 1);
+  assert.equal(observed.output.capability_candidates[0].status, "candidate");
+
+  const answered = await invoke([
+    "context", "ask", "--repo", root, "--store", store,
+    "--question", "main.ts 的入口主线是什么？", "--file-path", "src/main.ts", "--trace", tracePath,
+  ]);
+  assert.equal(answered.code, 0, JSON.stringify(answered.output));
+  assert.equal(answered.output.context.intent, "entry_flow");
+  assert.match(answered.output.answer.summary, /src\/main\.ts/);
+  assert.ok(answered.output.answer.findings.length > 0);
+
+  writeFileSync(path.join(root, "src", "main.ts"), "export function changed() { return 2; }\n");
+  const rejected = await invoke(["semantic", "build", "--repo", root, "--store", store]);
+  assert.equal(rejected.code, 3);
+  assert.equal(rejected.output.error.code, "STALE_SNAPSHOT");
+});
+
 test("graph traverse performs deterministic budgeted BFS over Definition relations", async () => {
   const { root, store } = fixture();
   writeFileSync(

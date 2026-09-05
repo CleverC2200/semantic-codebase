@@ -1,0 +1,36 @@
+{
+  "zod": {
+    "snapshot_id": "fef77bc0f437e74956f664b1a8f68ff3b23335c0aadf7a5da69d8d99a8082988",
+    "overlay_hash": "19863ef3cf7354ee921191da78a4c01c6815b0680f8cd833f0cf7c1aeb2c2335",
+    "semantic_facts": 2703,
+    "facts_by_kind": {
+      "application_flow": 303,
+      "call_target": 794,
+      "control_step": 468,
+      "effect": 404,
+      "entrypoint": 303,
+      "symbol_type": 431
+    }
+  },
+  "python": {
+    "snapshot_id": "32e7f9f6c530f2f109fe622eb4996d69a79ca1a31bf168e86dd0a38e9678318b",
+    "overlay_hash": "2d203eca5223c23593ed212d6b11a108b949c0b251aca5d28a165ae58abc7013",
+    "semantic_facts": 17,
+    "facts_by_kind": {
+      "application_flow": 1,
+      "call_target": 2,
+      "entrypoint": 1,
+      "import_target": 2,
+      "symbol_type": 11
+    }
+  },
+  "runtime": {
+    "observation_set_hash": "dd6aa416811815a4034ca21974a6b19f031ae1aeed987c16b3abd19c120ad778",
+    "observations": 2,
+    "candidates": 1
+  },
+  "context": {
+    "intent": "call_path",
+    "facts": 79
+  }
+}

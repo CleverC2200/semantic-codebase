@@ -153,6 +153,7 @@ export class QueryError extends Error {
       | "NO_READY_SNAPSHOT"
       | "SNAPSHOT_NOT_FOUND"
       | "STALE_SNAPSHOT"
+      | "SEMANTIC_OVERLAY_NOT_FOUND"
       | "INDEX_BUILD_FAILED"
       | "INTERNAL_QUERY_ERROR",
     message: string,

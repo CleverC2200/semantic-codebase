@@ -1,0 +1,47 @@
+{
+  "resourceSpans": [
+    {
+      "scopeSpans": [
+        {
+          "spans": [
+            {
+              "traceId": "zod-preview-trace",
+              "spanId": "add-issue",
+              "name": "addIssueToContext",
+              "startTimeUnixNano": "1000000",
+              "endTimeUnixNano": "1500000",
+              "attributes": [
+                {
+                  "key": "code.file.path",
+                  "value": { "stringValue": "packages/zod/src/v3/helpers/parseUtil.ts" }
+                },
+                {
+                  "key": "code.function.name",
+                  "value": { "stringValue": "addIssueToContext" }
+                }
+              ]
+            },
+            {
+              "traceId": "zod-preview-trace",
+              "spanId": "merge-object",
+              "parentSpanId": "add-issue",
+              "name": "ParseStatus.mergeObjectSync",
+              "startTimeUnixNano": "1100000",
+              "endTimeUnixNano": "1400000",
+              "attributes": [
+                {
+                  "key": "code.file.path",
+                  "value": { "stringValue": "packages/zod/src/v3/helpers/parseUtil.ts" }
+                },
+                {
+                  "key": "code.function.name",
+                  "value": { "stringValue": "ParseStatus.mergeObjectSync" }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

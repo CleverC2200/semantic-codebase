@@ -17,6 +17,7 @@
     "scb": "npm run build && node dist/cli/main.js",
     "benchmark:syntax": "npm run build && node --expose-gc scripts/benchmark-syntax.mjs",
     "corpus:zod": "npm run build && node scripts/generate-zod-smoke.mjs",
+    "preview:semantic": "npm run build && node scripts/run-semantic-preview.mjs",
     "prototype:zod": "npm run build && node scripts/run-zod-prototype-gate.mjs"
   },
   "engines": {
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "pyright": "^1.1.413",
     "tsx": "4.23.12",
     "typescript": "7.0.2"
   }

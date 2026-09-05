@@ -8,6 +8,7 @@ import {
   RepositoryIndexer,
   SnapshotStoreError,
   SqliteSnapshotStore,
+  TypeScriptSemanticEnricher,
   TypeScriptTreeSitterAdapter,
   canonicalHash,
   canonicalJson,
@@ -119,5 +120,42 @@ test("publication guard runs after integrity checks but before the Ready pointer
 
   assert.equal(database.getCurrentReady("repo")?.snapshot_id, first.snapshot_id);
   assert.equal(database.getSnapshotSummary("repo", second.snapshot_id)?.status, "failed");
+  database.close();
+});
+
+test("SQLite Store publishes one immutable Semantic Overlay and filters its raw facts", () => {
+  const text = "export function helper() { return 1; }\nexport function main() { return helper(); }\n";
+  const source_bytes = new TextEncoder().encode(text);
+  const source: RepositorySource = {
+    repository_id: "semantic-store-repo",
+    files: [{
+      relative_path: "src/main.ts",
+      language: "typescript",
+      source_bytes,
+      source_digest: sha256Bytes(source_bytes),
+    }],
+  };
+  const indexed = new RepositoryIndexer({
+    adapters: [new TypeScriptTreeSitterAdapter()],
+  }).buildFull(source).state;
+  const overlay = new TypeScriptSemanticEnricher().enrich({ state: indexed, source });
+  const database = store();
+
+  database.beginBuild(indexed.repository_id, indexed.snapshot_id);
+  database.publishReady(indexed);
+  database.publishSemanticOverlay(overlay);
+  database.publishSemanticOverlay(overlay);
+
+  assert.equal(database.getSemanticOverlay(indexed.repository_id, indexed.snapshot_id)?.overlay_hash, overlay.overlay_hash);
+  assert.ok(database.readSemanticFacts(indexed.repository_id, indexed.snapshot_id, {
+    file_path: "src/main.ts",
+    kind: "call_target",
+  }).length > 0);
+
+  const corrupted = { ...overlay, overlay_hash: "corrupted" };
+  assert.throws(
+    () => database.publishSemanticOverlay(corrupted),
+    (error: unknown) => error instanceof SnapshotStoreError && error.code === "STORE_INTEGRITY_ERROR",
+  );
   database.close();
 });

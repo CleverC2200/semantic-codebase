@@ -1,13 +1,27 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
 
 import { canonicalJson } from "../contract/hash.js";
+import {
+  answerContextPackage,
+  answerContextPackageWithCodex,
+  buildContextPackage,
+  ContextPackageError,
+} from "../context/index.js";
 import { DEFINITION_KINDS, RELATION_KINDS, type DefinitionKind, type RelationKind } from "../contract/types.js";
 import { RepositoryIndexer } from "../indexing/indexer.js";
 import { IndexBuildError, type IndexBuildResult } from "../indexing/types.js";
 import { DefinitionQueryService } from "../query/definition-query.js";
 import { GraphQueryService } from "../query/graph-query.js";
 import { QueryError } from "../query/types.js";
+import { importOpenTelemetryJson, RuntimeImportError } from "../runtime/index.js";
+import {
+  SEMANTIC_FACT_KINDS,
+  SemanticEnrichmentError,
+  SemanticRepositoryEnricher,
+  type SemanticFactKind,
+} from "../semantic/index.js";
 import {
   discoverRepository,
   repositoryManifestSummary,
@@ -65,6 +79,116 @@ function execute(
   }
   if (command === "status") {
     return repositoryStatus(discovered, store);
+  }
+  if (command === "semantic build") {
+    const state = store.getCurrentReady(discovered.source.repository_id);
+    if (!state) throw new QueryError("NO_READY_SNAPSHOT", "Repository has no Ready Snapshot");
+    if (repositoryManifestSummary(discovered.source).digest !== state.source_manifest_digest) {
+      throw new QueryError("STALE_SNAPSHOT", "Ready Snapshot does not match the observed Manifest");
+    }
+    const overlay = new SemanticRepositoryEnricher().enrich({ state, source: discovered.source });
+    store.publishSemanticOverlay(overlay);
+    return {
+      schema_version: 1,
+      command,
+      repository_id: state.repository_id,
+      snapshot_id: state.snapshot_id,
+      overlay_hash: overlay.overlay_hash,
+      profile: overlay.profile,
+      coverage: overlay.coverage,
+      fact_count: overlay.facts.length,
+      evidence_count: overlay.evidence.length,
+      store_path: discovered.store_path,
+    };
+  }
+  if (command === "semantic status") {
+    const state = store.getCurrentReady(discovered.source.repository_id);
+    const overlay = state ? store.getSemanticOverlay(state.repository_id, state.snapshot_id) : null;
+    return {
+      schema_version: 1,
+      repository_id: discovered.source.repository_id,
+      snapshot_id: state?.snapshot_id ?? null,
+      semantic_overlay: overlay ? {
+        status: "ready",
+        overlay_hash: overlay.overlay_hash,
+        profile: overlay.profile,
+        coverage: overlay.coverage,
+      } : { status: "unavailable" },
+    };
+  }
+  if (command === "semantic facts") {
+    const selector = parsed.options.get("snapshot") ?? "current_ready";
+    const state = selector === "current_ready"
+      ? store.getCurrentReady(discovered.source.repository_id)
+      : store.getSnapshot(discovered.source.repository_id, selector);
+    if (!state) throw new QueryError("SNAPSHOT_NOT_FOUND", `Snapshot not found: ${selector}`);
+    const freshness = repositoryManifestSummary(discovered.source).digest === state.source_manifest_digest
+      ? "fresh"
+      : "stale";
+    if (parsed.options.get("require-fresh") === "true" && freshness !== "fresh") {
+      throw new QueryError("STALE_SNAPSHOT", "Ready Snapshot does not match the observed Manifest");
+    }
+    const overlay = store.getSemanticOverlay(state.repository_id, state.snapshot_id);
+    if (!overlay) throw new QueryError("SEMANTIC_OVERLAY_NOT_FOUND", "Snapshot has no Semantic Overlay");
+    const facts = store.readSemanticFacts(state.repository_id, state.snapshot_id, {
+      ...(parsed.options.get("file-path") ? { file_path: parsed.options.get("file-path") } : {}),
+      ...(parsed.options.get("definition-key") ? { definition_key: parsed.options.get("definition-key") } : {}),
+      ...(semanticFactKindOption(parsed) ? { kind: semanticFactKindOption(parsed) } : {}),
+      ...(numberOption(parsed, "max-results") !== undefined ? { limit: numberOption(parsed, "max-results") } : {}),
+    });
+    const evidenceIds = new Set(facts.flatMap((fact) => fact.evidence_ids));
+    return {
+      schema_version: 1,
+      snapshot: { snapshot_id: state.snapshot_id, freshness },
+      data: {
+        facts,
+        evidence: overlay.evidence.filter((item) => evidenceIds.has(item.evidence_id)),
+      },
+      coverage: overlay.coverage,
+    };
+  }
+  if (command === "runtime import") {
+    const state = store.getCurrentReady(discovered.source.repository_id);
+    if (!state) throw new QueryError("NO_READY_SNAPSHOT", "Repository has no Ready Snapshot");
+    const overlay = store.getSemanticOverlay(state.repository_id, state.snapshot_id);
+    if (!overlay) throw new QueryError("SEMANTIC_OVERLAY_NOT_FOUND", "Snapshot has no Semantic Overlay");
+    const tracePath = requiredOption(parsed, "trace");
+    const trace = JSON.parse(readFileSync(tracePath, "utf8")) as unknown;
+    return importOpenTelemetryJson({
+      repository_id: state.repository_id,
+      snapshot_id: state.snapshot_id,
+      definitions: state.graph.definitions,
+      overlay,
+      trace,
+    });
+  }
+  if (command === "context ask") {
+    const state = store.getCurrentReady(discovered.source.repository_id);
+    if (!state) throw new QueryError("NO_READY_SNAPSHOT", "Repository has no Ready Snapshot");
+    const overlay = store.getSemanticOverlay(state.repository_id, state.snapshot_id);
+    if (!overlay) throw new QueryError("SEMANTIC_OVERLAY_NOT_FOUND", "Snapshot has no Semantic Overlay");
+    const runtime = parsed.options.get("trace")
+      ? importOpenTelemetryJson({
+          repository_id: state.repository_id,
+          snapshot_id: state.snapshot_id,
+          definitions: state.graph.definitions,
+          overlay,
+          trace: JSON.parse(readFileSync(parsed.options.get("trace")!, "utf8")) as unknown,
+        })
+      : null;
+    const context = buildContextPackage({
+      state,
+      overlay,
+      question: requiredOption(parsed, "question"),
+      ...(parsed.options.get("file-path") ? { file_path: parsed.options.get("file-path") } : {}),
+      ...(parsed.options.get("definition-key") ? { definition_key: parsed.options.get("definition-key") } : {}),
+      ...(numberOption(parsed, "max-results") !== undefined ? { max_facts: numberOption(parsed, "max-results") } : {}),
+      runtime,
+    });
+    const answer = parsed.options.get("codex") === "true"
+      ? answerContextPackageWithCodex(context)
+      : answerContextPackage(context);
+    return { schema_version: 1, context, answer };
   }
 
   const query = new DefinitionQueryService(store);
@@ -183,7 +307,7 @@ function parseArguments(argv: string[]): ParsedArguments {
       continue;
     }
     const name = argument.slice(2);
-    if (name === "require-fresh") {
+    if (name === "require-fresh" || name === "codex") {
       if (options.has(name)) throw new QueryError("INVALID_ARGUMENT", `Duplicate option: --${name}`);
       options.set(name, "true");
       continue;
@@ -207,6 +331,11 @@ function validateCommandOptions(parsed: ParsedArguments): void {
     index: common,
     sync: common,
     status: common,
+    "semantic build": common,
+    "semantic status": common,
+    "semantic facts": [...queryScope, "file-path", "definition-key", "kind", "max-results"],
+    "runtime import": [...common, "trace"],
+    "context ask": [...common, "question", "file-path", "definition-key", "max-results", "trace", "codex"],
     "definitions find": [...queryScope, "query", "kind", "file-path", "max-results"],
     "definition get": [...queryScope, "definition-key"],
     "evidence get": [...queryScope, "evidence-id", "source-bytes"],
@@ -272,8 +401,24 @@ function definitionKindOption(parsed: ParsedArguments): DefinitionKind | undefin
   return raw as DefinitionKind;
 }
 
+function semanticFactKindOption(parsed: ParsedArguments): SemanticFactKind | undefined {
+  const raw = parsed.options.get("kind");
+  if (!raw) return undefined;
+  if (!SEMANTIC_FACT_KINDS.includes(raw as SemanticFactKind)) {
+    throw new QueryError("INVALID_ARGUMENT", `Unsupported Semantic Fact kind: ${raw}`);
+  }
+  return raw as SemanticFactKind;
+}
+
 function normalizeError(error: unknown): { code: string; message: string } {
-  if (error instanceof QueryError || error instanceof SnapshotStoreError || error instanceof RepositorySourceError) {
+  if (
+    error instanceof QueryError ||
+    error instanceof SnapshotStoreError ||
+    error instanceof RepositorySourceError ||
+    error instanceof SemanticEnrichmentError ||
+    error instanceof RuntimeImportError ||
+    error instanceof ContextPackageError
+  ) {
     return { code: error.code, message: error.message };
   }
   if (error instanceof IndexBuildError) {
@@ -293,6 +438,7 @@ function exitCode(code: string): number {
     "NO_READY_SNAPSHOT",
     "SNAPSHOT_NOT_READY",
     "STALE_SNAPSHOT",
+    "SEMANTIC_OVERLAY_NOT_FOUND",
   ].includes(code)) return 3;
   return 4;
 }

@@ -8,5 +8,8 @@ export * from "./indexing/index.js";
 export * from "./store/index.js";
 export * from "./repository/index.js";
 export * from "./query/index.js";
+export * from "./semantic/index.js";
+export * from "./runtime/index.js";
+export * from "./context/index.js";
 export { runCli } from "./cli/main.js";
 export * from "./mcp/index.js";

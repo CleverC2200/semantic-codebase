@@ -13,6 +13,7 @@ import type {
 import type { RelationKind } from "../contract/types.js";
 import type { DefinitionFilter, NormalizedTraversalDirection } from "../query/types.js";
 import type { IndexState } from "../indexing/types.js";
+import type { SemanticFact, SemanticOverlay } from "../semantic/types.js";
 import type { SnapshotStatus, SnapshotStore, SnapshotSummary } from "./types.js";
 import { SnapshotStoreError } from "./types.js";
 
@@ -25,7 +26,7 @@ interface SnapshotRow {
   state_json: string | null;
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const require = createRequire(import.meta.url);
 
 export class SqliteSnapshotStore implements SnapshotStore {
@@ -180,6 +181,133 @@ export class SqliteSnapshotStore implements SnapshotStore {
       : null;
   }
 
+  publishSemanticOverlay(overlay: SemanticOverlay): void {
+    verifySemanticOverlay(overlay);
+    this.transaction(() => {
+      const snapshot = this.snapshotRow(overlay.repository_id, overlay.snapshot_id);
+      if (
+        !snapshot ||
+        !["ready", "superseded"].includes(snapshot.status) ||
+        snapshot.graph_hash !== overlay.structural_graph_hash
+      ) {
+        throw new SnapshotStoreError(
+          "SNAPSHOT_NOT_READY",
+          `Semantic Overlay requires its matching Ready Snapshot: ${overlay.snapshot_id}`,
+        );
+      }
+      const existing = this.database.prepare(
+        `SELECT overlay_hash FROM semantic_overlays WHERE repository_id = ? AND snapshot_id = ?`,
+      ).get(overlay.repository_id, overlay.snapshot_id) as { overlay_hash: string } | undefined;
+      if (existing) {
+        if (existing.overlay_hash === overlay.overlay_hash) return;
+        throw new SnapshotStoreError(
+          "SNAPSHOT_IMMUTABLE",
+          `Semantic Overlay already exists for Snapshot ${overlay.snapshot_id}`,
+        );
+      }
+      this.database.prepare(
+        `INSERT INTO semantic_overlays(
+           repository_id, snapshot_id, overlay_hash, profile_id, coverage_json, diagnostics_json, overlay_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        overlay.repository_id,
+        overlay.snapshot_id,
+        overlay.overlay_hash,
+        `${overlay.profile.id}@${overlay.profile.version}`,
+        canonicalJson(overlay.coverage),
+        canonicalJson(overlay.diagnostics),
+        canonicalJson(overlay),
+      );
+      const evidenceById = new Map(overlay.evidence.map((item) => [item.evidence_id, item]));
+      const insertEvidence = this.database.prepare(
+        `INSERT INTO semantic_evidence(
+           repository_id, snapshot_id, evidence_id, file_path, start_byte, end_byte, evidence_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const evidence of overlay.evidence) {
+        insertEvidence.run(
+          overlay.repository_id,
+          overlay.snapshot_id,
+          evidence.evidence_id,
+          evidence.file_path,
+          evidence.span.start_byte,
+          evidence.span.end_byte,
+          canonicalJson(evidence),
+        );
+      }
+      const insertFact = this.database.prepare(
+        `INSERT INTO semantic_facts(
+           repository_id, snapshot_id, fact_id, kind, basis_kind, subject_kind,
+           subject_definition_key, file_path, fact_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const fact of overlay.facts) {
+        const filePath = fact.subject.kind === "source_file"
+          ? fact.subject.file_path
+          : evidenceById.get(fact.evidence_ids[0] ?? "")?.file_path ?? null;
+        insertFact.run(
+          overlay.repository_id,
+          overlay.snapshot_id,
+          fact.fact_id,
+          fact.kind,
+          fact.basis.kind,
+          fact.subject.kind,
+          fact.subject.kind === "definition" ? fact.subject.definition_key : null,
+          filePath,
+          canonicalJson(fact),
+        );
+      }
+      const counts = this.database.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM semantic_facts WHERE repository_id = ? AND snapshot_id = ?) AS facts,
+           (SELECT COUNT(*) FROM semantic_evidence WHERE repository_id = ? AND snapshot_id = ?) AS evidence`,
+      ).get(
+        overlay.repository_id,
+        overlay.snapshot_id,
+        overlay.repository_id,
+        overlay.snapshot_id,
+      ) as { facts: number; evidence: number };
+      if (Number(counts.facts) !== overlay.facts.length || Number(counts.evidence) !== overlay.evidence.length) {
+        throw new SnapshotStoreError("STORE_INTEGRITY_ERROR", "Semantic Overlay row count mismatch");
+      }
+    });
+  }
+
+  getSemanticOverlay(repositoryId: string, snapshotId: string): SemanticOverlay | null {
+    const row = this.database.prepare(
+      `SELECT overlay_json FROM semantic_overlays WHERE repository_id = ? AND snapshot_id = ?`,
+    ).get(repositoryId, snapshotId) as { overlay_json: string } | undefined;
+    return row ? JSON.parse(row.overlay_json) as SemanticOverlay : null;
+  }
+
+  readSemanticFacts(
+    repositoryId: string,
+    snapshotId: string,
+    filter: { file_path?: string; definition_key?: string; kind?: string; limit?: number } = {},
+  ): SemanticFact[] {
+    const clauses: string[] = ["repository_id = ?", "snapshot_id = ?"];
+    const values: Array<string | number> = [repositoryId, snapshotId];
+    if (filter.file_path) {
+      clauses.push("file_path = ?");
+      values.push(filter.file_path);
+    }
+    if (filter.definition_key) {
+      clauses.push("subject_definition_key = ?");
+      values.push(filter.definition_key);
+    }
+    if (filter.kind) {
+      clauses.push("kind = ?");
+      values.push(filter.kind);
+    }
+    values.push(filter.limit ?? 500);
+    const rows = this.database.prepare(
+      `SELECT fact_json FROM semantic_facts
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY kind, fact_id LIMIT ?`,
+    ).all(...values) as Array<{ fact_json: string }>;
+    return rows.map((row) => JSON.parse(row.fact_json) as SemanticFact);
+  }
+
   resolveReadySnapshot(
     repositoryId: string,
     selector: "current_ready" | string,
@@ -329,11 +457,20 @@ export class SqliteSnapshotStore implements SnapshotStore {
     if ((applied.version ?? 0) > SCHEMA_VERSION) {
       throw new SnapshotStoreError("STORE_INTEGRITY_ERROR", "Store schema is newer than this runtime");
     }
-    if ((applied.version ?? 0) === SCHEMA_VERSION) return;
-    this.transaction(() => {
-      this.database.exec(SCHEMA_V1);
-      this.database.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(SCHEMA_VERSION);
-    });
+    let version = applied.version ?? 0;
+    if (version < 1) {
+      this.transaction(() => {
+        this.database.exec(SCHEMA_V1);
+        this.database.prepare("INSERT INTO schema_migrations(version) VALUES (1)").run();
+      });
+      version = 1;
+    }
+    if (version < 2) {
+      this.transaction(() => {
+        this.database.exec(SCHEMA_V2);
+        this.database.prepare("INSERT INTO schema_migrations(version) VALUES (2)").run();
+      });
+    }
   }
 
   private insertSnapshotFacts(state: IndexState): void {
@@ -537,6 +674,16 @@ function verifyReadyState(state: IndexState): void {
   }
 }
 
+function verifySemanticOverlay(overlay: SemanticOverlay): void {
+  if (!overlay.repository_id || !overlay.snapshot_id || !overlay.structural_graph_hash) {
+    throw new SnapshotStoreError("STORE_INTEGRITY_ERROR", "Semantic Overlay identity is incomplete");
+  }
+  const { overlay_hash, ...withoutHash } = overlay;
+  if (canonicalHash(withoutHash) !== overlay_hash) {
+    throw new SnapshotStoreError("STORE_INTEGRITY_ERROR", "Semantic Overlay hash mismatch");
+  }
+}
+
 function parseState(row: SnapshotRow | undefined): IndexState | null {
   if (!row?.state_json || !["ready", "superseded"].includes(row.status)) return null;
   return JSON.parse(row.state_json) as IndexState;
@@ -631,4 +778,46 @@ const SCHEMA_V1 = `
   CREATE INDEX relations_target ON relations(repository_id, snapshot_id, target_definition_key, target_file_path, kind);
   CREATE INDEX evidence_lookup ON evidence(repository_id, snapshot_id, evidence_id);
   CREATE INDEX candidates_status ON relation_candidates(repository_id, snapshot_id, file_path, kind, resolution_status);
+`;
+
+const SCHEMA_V2 = `
+  CREATE TABLE semantic_overlays (
+    repository_id TEXT NOT NULL,
+    snapshot_id TEXT NOT NULL,
+    overlay_hash TEXT NOT NULL,
+    profile_id TEXT NOT NULL,
+    coverage_json TEXT NOT NULL,
+    diagnostics_json TEXT NOT NULL,
+    overlay_json TEXT NOT NULL,
+    ready_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(repository_id, snapshot_id),
+    FOREIGN KEY(repository_id, snapshot_id) REFERENCES snapshots(repository_id, snapshot_id)
+  );
+  CREATE TABLE semantic_facts (
+    repository_id TEXT NOT NULL,
+    snapshot_id TEXT NOT NULL,
+    fact_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    basis_kind TEXT NOT NULL,
+    subject_kind TEXT NOT NULL,
+    subject_definition_key TEXT,
+    file_path TEXT,
+    fact_json TEXT NOT NULL,
+    PRIMARY KEY(repository_id, snapshot_id, fact_id),
+    FOREIGN KEY(repository_id, snapshot_id) REFERENCES semantic_overlays(repository_id, snapshot_id)
+  );
+  CREATE TABLE semantic_evidence (
+    repository_id TEXT NOT NULL,
+    snapshot_id TEXT NOT NULL,
+    evidence_id TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    start_byte INTEGER NOT NULL,
+    end_byte INTEGER NOT NULL,
+    evidence_json TEXT NOT NULL,
+    PRIMARY KEY(repository_id, snapshot_id, evidence_id),
+    FOREIGN KEY(repository_id, snapshot_id) REFERENCES semantic_overlays(repository_id, snapshot_id)
+  );
+  CREATE INDEX semantic_facts_file ON semantic_facts(repository_id, snapshot_id, file_path, kind);
+  CREATE INDEX semantic_facts_definition ON semantic_facts(repository_id, snapshot_id, subject_definition_key, kind);
+  CREATE INDEX semantic_evidence_file ON semantic_evidence(repository_id, snapshot_id, file_path, start_byte);
 `;
