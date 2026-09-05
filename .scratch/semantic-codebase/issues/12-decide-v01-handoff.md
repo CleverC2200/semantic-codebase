@@ -19,4 +19,4 @@ Parent: [找到 Semantic Codebase V0.1 的可实施路径](../map.md)
 
 V0.1 固定为八个纵向切片：首个可查询 Definition、基础结构关系、跨文件调用与类型关系、Snapshot/增量、完整查询契约、MCP 同源 Adapter、真实项目 Prototype Gate，以及方向确认后的 SCIP/Release Gate。每个切片都通过真实 Index/Query/CLI/MCP Interface 产生可验证价值，禁止以横向内部模块堆积冒充完成。
 
-历史决策曾要求自有产品代码落在 `product/semantic-codebase/`、参考仓库位于 `projects/`，并先完成 Slice 1。该 Slice 1 现已移入 `references/semantic-codebase/`；2026-08-24 起当前项目从顶层重新实现，本段不再是执行指令。
+历史决策曾要求自有产品代码落在 `product/semantic-codebase/`、参考仓库位于 `projects/`，并先完成 Slice 1。该 Slice 1 后曾移入 `references/semantic-codebase/`，并于 2026-08-25 从当前工作区退役；历史实现可从本地发布前 Git bundle 恢复，本段不再是执行指令。

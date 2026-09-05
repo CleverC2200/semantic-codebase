@@ -4,7 +4,7 @@
 
 ## 范围
 
-历史实现当前归档目录：`references/semantic-codebase/`
+历史实现已于 2026-08-25 从当前工作区退役；必要时可从 `.workspace/backups/pre-public-with-references.bundle` 恢复当时受 Git 跟踪的源码。
 
 本收据只覆盖 Slice 1：
 

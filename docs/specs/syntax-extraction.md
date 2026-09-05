@@ -562,6 +562,7 @@ CodeGraph 可以在冻结公开 Corpus 上作为黑盒对照，比较 Definition
 
 ## 16. 参考边界
 
-- 本地 `references/semantic-codebase/`：早期 Definition/Evidence/Snapshot 原型，只用于验证简化 Interface 和历史行为；该目录不进入 Git。
+- [早期 Slice 1 验收收据](../../.scratch/semantic-codebase/receipts/slice-1-acceptance.md)：保留 Definition/Evidence/Snapshot 原型的历史行为证据；原型源码已从当前工作区退役。
+- 本地 `references/zod/`：固定提交的 TypeScript 真实项目测试语料，不是运行时依赖；当前先用 `packages/zod/src/v3/` 做快速 smoke，完整范围保留为 grammar 兼容门禁；该目录不进入 Git。
 - 本地 `references/codegraph/`：Tree-sitter、多语言抽取、Resolver、worker 和 SQLite 工程参考，不作为运行时依赖；该目录不进入 Git。
 - [历史 Syntax Adapter 决策](../../.scratch/semantic-codebase/issues/09-decide-source-adapter-seam.md)：本 Spec 的上游决策证据；当前执行以本 Spec 和 `CONTEXT.md` 为准。

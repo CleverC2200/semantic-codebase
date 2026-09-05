@@ -1,6 +1,6 @@
 # 找到 Semantic Codebase V0.1 的可实施路径
 
-> 历史状态：本地图记录早期 V0.1 路线。2026-08-24 起，早期实现已移入 `references/semantic-codebase/`，只作参考；当前自研代码从顶层 Semantic Codebase 仓库重新开始。涉及旧代码落点和“下一任务”的描述不再是当前执行指令。
+> 历史状态：本地图记录早期 V0.1 路线。早期实现曾作为 Reference 保留，并于 2026-08-25 从当前工作区退役；历史证据保留在验收收据和本地发布前 Git bundle 中。涉及旧代码落点和“下一任务”的描述不再是当前执行指令。
 
 Label: wayfinder:map
 
@@ -54,7 +54,7 @@ Label: wayfinder:map
 
 - [研究 P0～P7 开源项目能力地图](issues/16-research-open-source-stage-map.md) — P0～P7 已明确直接复用、Adapter、设计借鉴与暂缓边界；当前原型只采用 Tree-sitter、自有 SQLite GraphStore、CodeGraph/Kythe 参考和后置 scip-typescript Adapter，Archify 留作展示器。
 
-- [确定 V0.1 实施切片与交接完整性](issues/12-decide-v01-handoff.md) — 历史 V0.1 曾收敛为八个纵向切片并完成 Slice 1；该实现现位于 `references/semantic-codebase/`，不再是当前产品源码起点。
+- [确定 V0.1 实施切片与交接完整性](issues/12-decide-v01-handoff.md) — 历史 V0.1 曾收敛为八个纵向切片并完成 Slice 1；该实现已从当前工作区退役，不再是产品源码起点。
 
 ## Not yet specified
 
