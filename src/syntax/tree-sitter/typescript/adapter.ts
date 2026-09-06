@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import Parser from "tree-sitter";
 import TypeScriptGrammar from "tree-sitter-typescript";
 
-import { sha256Text } from "../../../contract/hash.js";
+import { sha256Bytes } from "../../../contract/hash.js";
 import type { ByteSpan, Diagnostic, SourceFileInput, SubjectLocalRef } from "../../../contract/types.js";
 import {
   type CandidateExtraction,
@@ -14,6 +15,19 @@ import {
 
 const DEFAULT_QUERY = readFileSync(new URL("./definitions.scm", import.meta.url), "utf8");
 const DEFAULT_RELATIONS_QUERY = readFileSync(new URL("./relations.scm", import.meta.url), "utf8");
+const require = createRequire(import.meta.url);
+const GRAMMAR_DIGEST = sha256Bytes(readFileSync(require.resolve("tree-sitter-typescript/typescript/src/parser.c")));
+if (GRAMMAR_DIGEST !== "1c28b7548c12fd4edaf30668c31bf35453ebf032e57b066020e73007d59050db") {
+  throw new Error("TypeScript grammar is not prepared; run npm run prepare:grammar (full development dependencies required)");
+}
+// Detect a stale native/prebuilt binding even when generated sources are current.
+{
+  const grammarProbe = new Parser();
+  grammarProbe.setLanguage(TypeScriptGrammar.typescript);
+  if (grammarProbe.parse("interface Box<out T, in U, in out V, out> {}").rootNode.hasError) {
+    throw new Error("TypeScript native grammar is stale; run npm run prepare:grammar");
+  }
+}
 
 export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
   constructor(options: { definitionsQuerySource?: string; relationsQuerySource?: string; maxSourceBytes?: number } = {}) {
@@ -25,8 +39,8 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
         runtime: { id: "tree-sitter", version: "0.21.1" },
         grammar: {
           id: "tree-sitter-typescript/typescript",
-          version: "0.23.2",
-          digest: sha256Text("tree-sitter-typescript@0.23.2:typescript"),
+          version: "0.23.2-scb.1",
+          digest: GRAMMAR_DIGEST,
         },
         capabilities: {
           definition_kinds: ["module", "class", "interface", "function", "method"],
@@ -191,9 +205,14 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
     input: SourceFileInput,
     offsetMap: Utf8OffsetMap,
   ): Diagnostic[] {
+    const stableBindings = new Set<string>();
+    for (const definition of definitions) {
+      const value = definition.node.childForFieldName("value");
+      if (value) stableBindings.add(`${value.startIndex}:${value.endIndex}`);
+    }
     return rootNode
       .descendantsOfType(["arrow_function", "function_expression", "class"])
-      .filter((node) => !isStableCallableBinding(node, definitions))
+      .filter((node) => !stableBindings.has(`${node.startIndex}:${node.endIndex}`))
       .map((node) => ({
         code: "unsupported_anonymous_definition",
         severity: "info" as const,
@@ -246,11 +265,4 @@ function isNode(node: Parser.SyntaxNode | null): node is Parser.SyntaxNode {
 
 function isDefinitionKind(value: string): value is RawDefinition["kind"] {
   return ["module", "class", "interface", "function", "method"].includes(value);
-}
-
-function isStableCallableBinding(node: Parser.SyntaxNode, definitions: RawDefinition[]): boolean {
-  return definitions.some((definition) => {
-    const value = definition.node.childForFieldName("value");
-    return value?.startIndex === node.startIndex && value.endIndex === node.endIndex;
-  });
 }

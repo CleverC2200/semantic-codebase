@@ -17,6 +17,8 @@ import type {
   Resolver,
 } from "./types.js";
 
+export const RESOLVER_PROFILE_VERSION = "2";
+
 interface LocatedDefinition {
   file_path: string;
   definition: DefinitionDraft;
@@ -38,9 +40,10 @@ interface ExportBinding {
 interface ResolutionContext {
   view: FrozenRepositoryView;
   slicesByPath: Map<string, SyntaxSlice>;
-  definitions: LocatedDefinition[];
+  definitionsByPath: Map<string, LocatedDefinition[]>;
   exportBindings: Map<string, ExportBinding[]>;
   importBindings: Map<string, ImportBinding[]>;
+  localImportNames: Map<string, Map<string, Set<string>>>;
 }
 
 interface CandidateLocation {
@@ -74,15 +77,19 @@ export class DeterministicResolver implements Resolver {
     }
 
     const slicesByPath = new Map(view.slices.map((slice) => [slice.file.relative_path, slice]));
-    const definitions = view.slices.flatMap((slice) =>
-      slice.definitions.map((definition) => ({ file_path: slice.file.relative_path, definition })),
-    );
+    const definitionsByPath = new Map<string, LocatedDefinition[]>();
+    for (const slice of view.slices) {
+      const definitions = definitionsByPath.get(slice.file.relative_path) ?? [];
+      for (const definition of slice.definitions) definitions.push({ file_path: slice.file.relative_path, definition });
+      definitionsByPath.set(slice.file.relative_path, definitions);
+    }
     const context: ResolutionContext = {
       view,
       slicesByPath,
-      definitions,
+      definitionsByPath,
       exportBindings: new Map(),
       importBindings: new Map(),
+      localImportNames: new Map(),
     };
     context.exportBindings = buildExportBindings(context);
     context.importBindings = buildImportBindings(context);
@@ -93,26 +100,28 @@ export class DeterministicResolver implements Resolver {
           file_path: slice.file.relative_path,
           slice,
           candidate,
+          sort_key: canonicalJson(candidate),
         })),
       )
-      .sort(compareCandidateLocations);
+      .sort((left, right) => left.file_path.localeCompare(right.file_path) || left.sort_key.localeCompare(right.sort_key));
     const resolved_relations: ResolvedRelationDraft[] = [];
     const unresolved_candidates: RelationCandidate[] = [];
     const diagnostics: Diagnostic[] = [];
 
     for (const location of candidates) {
-      const result = resolveCandidate(location, context);
+      const supportedSource = supportsCandidateSource(location.slice, location.candidate);
+      const result = supportedSource ? resolveCandidate(location, context) : null;
       if (!result) {
         unresolved_candidates.push(location.candidate);
         const evidence = location.slice.evidence.find((item) =>
           location.candidate.evidence_local_ids.includes(item.local_id),
         );
         diagnostics.push({
-          code: "unresolved_relation_candidate",
+          code: supportedSource ? "unresolved_relation_candidate" : "unsupported_relation_source",
           severity: "info",
           file_path: location.file_path,
           ...(evidence ? { span: evidence.span } : {}),
-          message: `${location.candidate.kind} candidate has zero or multiple exact targets`,
+          message: supportedSource ? `${location.candidate.kind} candidate has zero or multiple exact targets` : `${location.candidate.kind} source scope is outside the structural relation contract`,
         });
         continue;
       }
@@ -186,8 +195,17 @@ function buildImportBindings(context: ResolutionContext): Map<string, ImportBind
     for (const candidate of slice.relation_candidates) {
       if (candidate.kind !== "IMPORTS" || candidate.target_hint.kind !== "module") continue;
       const hint = candidate.target_hint;
-      const targetFile = resolveModulePath(slice.file.relative_path, slice.file.language, hint.specifier, context);
       const localName = hint.alias ?? hint.imported_name ?? moduleLocalName(hint.specifier);
+      if (!supportsCandidateSource(slice, candidate)) {
+        if (candidate.source_local_ref.kind === "definition") {
+          const scopes = context.localImportNames.get(slice.file.relative_path) ?? new Map<string, Set<string>>();
+          const names = scopes.get(candidate.source_local_ref.local_id) ?? new Set<string>();
+          names.add(localName); scopes.set(candidate.source_local_ref.local_id, names);
+          context.localImportNames.set(slice.file.relative_path, scopes);
+        }
+        continue;
+      }
+      const targetFile = resolveModulePath(slice.file.relative_path, slice.file.language, hint.specifier, context);
       const binding: ImportBinding = { local_name: localName };
       if (targetFile) binding.target_file = targetFile;
       if (targetFile && hint.imported_name && hint.imported_name !== "*") {
@@ -200,6 +218,14 @@ function buildImportBindings(context: ResolutionContext): Map<string, ImportBind
     bindings.set(slice.file.relative_path, fileBindings);
   }
   return bindings;
+}
+
+function supportsCandidateSource(slice: SyntaxSlice, candidate: RelationCandidate): boolean {
+  const source = candidate.source_local_ref;
+  if (source.kind === "source_file") return true;
+  if (!["IMPORTS", "EXPORTS", "CALLS"].includes(candidate.kind)) return true;
+  const kind = slice.definitions.find((definition) => definition.local_id === source.local_id)?.kind;
+  return candidate.kind === "CALLS" ? kind === "function" || kind === "method" : kind === "module";
 }
 
 function buildExportBindings(context: ResolutionContext): Map<string, ExportBinding[]> {
@@ -346,6 +372,18 @@ function resolveModuleHint(
 
 function resolveCall(location: CandidateLocation, context: ResolutionContext): TargetResolution | null {
   const { target_hint: hint } = location.candidate;
+  const localScopes = context.localImportNames.get(location.file_path);
+  const name = hint.kind === "name" ? hint.name : hint.kind === "member" ? hint.receiver_text : null;
+  if (localScopes && name && location.candidate.source_local_ref.kind === "definition") {
+    let owner: string | null = location.candidate.source_local_ref.local_id;
+    const visited = new Set<string>();
+    while (owner && !visited.has(owner)) {
+      visited.add(owner);
+      const names = localScopes.get(owner);
+      if (names?.has(name) || names?.has("*")) return null;
+      owner = location.slice.definitions.find((definition) => definition.local_id === owner)?.container_local_id ?? null;
+    }
+  }
   if (hint.kind === "name") {
     const sameFile = uniqueDefinition(context, location.file_path, hint.name);
     if (sameFile) {
@@ -489,9 +527,8 @@ function uniqueDefinition(
   name: string,
   kinds?: DefinitionDraft["kind"][],
 ): LocatedDefinition | null {
-  const matches = context.definitions.filter(
+  const matches = (context.definitionsByPath.get(filePath) ?? []).filter(
     (located) =>
-      located.file_path === filePath &&
       (located.definition.name === name || located.definition.qualified_name === name) &&
       (!kinds || kinds.includes(located.definition.kind)),
   );
@@ -504,8 +541,7 @@ function uniqueDefinitionForSource(
   source: SubjectLocalRef,
   name: string,
 ): LocatedDefinition | null {
-  const matches = context.definitions.filter((located) =>
-    located.file_path === filePath &&
+  const matches = (context.definitionsByPath.get(filePath) ?? []).filter((located) =>
     located.definition.name === name &&
     located.definition.container_local_id === (source.kind === "source_file" ? null : source.local_id),
   );
@@ -520,8 +556,7 @@ function importableBinding(
   const slice = context.slicesByPath.get(targetFile);
   if (!slice) return null;
   if (slice.file.language === "python") {
-    const target = context.definitions.filter((located) =>
-      located.file_path === targetFile &&
+    const target = (context.definitionsByPath.get(targetFile) ?? []).filter((located) =>
       located.definition.container_local_id === null &&
       located.definition.name === exportedName,
     );
@@ -621,11 +656,4 @@ function definitionEndpoint(located: LocatedDefinition): ResolvedEndpoint {
 
 function moduleLocalName(specifier: string): string {
   return specifier.split(/[/.]/).filter(Boolean).at(-1) ?? specifier;
-}
-
-function compareCandidateLocations(left: CandidateLocation, right: CandidateLocation): number {
-  return (
-    left.file_path.localeCompare(right.file_path) ||
-    canonicalJson(left.candidate).localeCompare(canonicalJson(right.candidate))
-  );
 }

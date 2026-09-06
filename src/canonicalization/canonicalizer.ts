@@ -1,4 +1,4 @@
-import { canonicalHash, canonicalJson } from "../contract/hash.js";
+import { canonicalHash, canonicalJson, canonicalRecordHash } from "../contract/hash.js";
 import type {
   DefinitionDraft,
   Diagnostic,
@@ -117,7 +117,7 @@ export class SnapshotCanonicalizer implements Canonicalizer {
       diagnostics: allDiagnostics,
       coverage,
     };
-    return { ...graphWithoutHash, graph_hash: canonicalHash(graphWithoutHash) };
+    return { ...graphWithoutHash, graph_hash: canonicalRecordHash(graphWithoutHash) };
   }
 }
 

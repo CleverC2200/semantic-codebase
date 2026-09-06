@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { after, test } from "node:test";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 import { runCli } from "../../src/index.js";
 
@@ -37,6 +38,77 @@ async function invoke(arguments_: string[]) {
   assert.equal(lines.length, 1);
   return { code, output: JSON.parse(lines[0]!), stderr };
 }
+
+test("semantic profile carries enrichment through source change and sync", async () => {
+  const { root, store } = fixture();
+  const first = await invoke(["index", "--repo", root, "--store", store, "--profile", "semantic-v0"]);
+  assert.equal(first.code, 0); assert.ok(first.output.semantic.overlay_hash);
+  writeFileSync(path.join(root, "src", "main.ts"), "export function hello() { return '更新'; }\n");
+  const synced = await invoke(["sync", "--repo", root, "--store", store]);
+  assert.equal(synced.code, 0); assert.ok(synced.output.semantic.overlay_hash);
+  assert.notEqual(synced.output.snapshot_id, first.output.snapshot_id);
+  const rebuilt = await invoke(["index", "--repo", root, "--store", store, "--profile", "semantic-v0"]);
+  assert.equal(rebuilt.code, 0);
+  assert.equal(rebuilt.output.semantic.overlay_hash, synced.output.semantic.overlay_hash);
+});
+
+test("configuration-only change makes CLI status stale and sync rebuilds the semantic snapshot", async () => {
+  const { root, store } = fixture();
+  const config = path.join(root, "tsconfig.json");
+  writeFileSync(config, JSON.stringify({ compilerOptions: { strict: false }, include: ["src/**/*.ts"] }));
+  const first = await invoke(["index", "--repo", root, "--store", store, "--profile", "semantic-v0"]);
+  assert.equal(first.code, 0);
+  assert.equal(first.output.coverage.file_count, 1);
+  const fresh = await invoke(["status", "--repo", root, "--store", store]);
+  assert.equal(fresh.output.freshness.status, "fresh");
+  writeFileSync(config, JSON.stringify({ compilerOptions: { strict: true }, include: ["src/**/*.ts"] }));
+  const stale = await invoke(["status", "--repo", root, "--store", store]);
+  assert.equal(stale.output.freshness.status, "stale");
+  const synced = await invoke(["sync", "--repo", root, "--store", store]);
+  assert.equal(synced.code, 0);
+  assert.notEqual(synced.output.snapshot_id, first.output.snapshot_id);
+  assert.notEqual(synced.output.semantic.overlay_hash, first.output.semantic.overlay_hash);
+  const rebuilt = await invoke(["index", "--repo", root, "--store", store, "--profile", "semantic-v0"]);
+  assert.equal(rebuilt.output.semantic.overlay_hash, synced.output.semantic.overlay_hash);
+});
+
+test("semantic configuration failure does not advance the previous Ready pointer", async () => {
+  const { root, store } = fixture();
+  const first = await invoke(["index", "--repo", root, "--store", store, "--profile", "semantic-v0"]);
+  writeFileSync(path.join(root, "tsconfig.json"), '{"extends":"./missing.json"}');
+  const failed = await invoke(["sync", "--repo", root, "--store", store]);
+  assert.notEqual(failed.code, 0);
+  assert.equal(failed.output.error.code, "INVALID_PROJECT_CONFIGURATION");
+  const status = await invoke(["status", "--repo", root, "--store", store]);
+  assert.equal(status.output.current_ready.snapshot_id, first.output.snapshot_id);
+  assert.equal(status.output.freshness.status, "stale");
+});
+
+test("explicit trace run binds generated OTLP to the Snapshot without returning command logs", async () => {
+  const { root, store } = fixture();
+  const indexed = await invoke(["index", "--repo", root, "--store", store, "--profile", "semantic-v0"]);
+  const script = `require('node:fs').writeFileSync(process.env.SCB_TRACE_OUTPUT, JSON.stringify({spans:[{traceId:'fixture',spanId:'one',name:'hello',attributes:[{key:'code.file.path',value:{stringValue:'src/main.ts'}},{key:'code.function.name',value:{stringValue:'hello'}},{key:'scb.snapshot_id',value:{stringValue:process.env.SCB_SNAPSHOT_ID}}]}]})); console.log('private-fixture-log');`;
+  const result = await invoke(["trace", "run", "--repo", root, "--store", store, "--", process.execPath, "-e", script]);
+  assert.equal(result.code, 0);
+  assert.equal(result.output.execution.snapshot_id, indexed.output.snapshot_id);
+  assert.equal(result.output.observations.coverage.matched_span_count, 1);
+  assert.ok(!JSON.stringify(result.output).includes("private-fixture-log"));
+  const failed = await invoke(["trace", "run", "--repo", root, "--store", store, "--", process.execPath, "-e", "process.exit(9)"]);
+  assert.equal(failed.code, 1);
+  assert.equal(failed.output.execution.exit_code, 9);
+  assert.equal(failed.output.status, "no_trace");
+  const invalid = await invoke(["trace", "run", "--repo", root, "--store", store, "--", process.execPath, "-e", "require('node:fs').writeFileSync(process.env.SCB_TRACE_OUTPUT, 'invalid')"]);
+  assert.equal(invalid.code, 1);
+  assert.equal(invalid.output.status, "invalid_trace");
+  assert.equal(invalid.output.execution.exit_code, 0);
+  const timed = await invoke(["trace", "run", "--repo", root, "--store", store, "--timeout-ms", "10", "--", process.execPath, "-e", "setInterval(() => {}, 1000)"]);
+  assert.equal(timed.code, 1);
+  assert.equal(timed.output.execution.error_code, "EXECUTION_FAILED_OR_TIMED_OUT");
+  writeFileSync(path.join(root, "src/main.ts"), "export function changed() {}\n");
+  const stale = await invoke(["trace", "run", "--repo", root, "--store", store, "--", process.execPath, "-e", "require('node:fs').writeFileSync('should-not-run', '')"]);
+  assert.equal(stale.output.error.code, "STALE_SNAPSHOT");
+  assert.equal(existsSync(path.join(root, "should-not-run")), false);
+});
 
 test("CLI indexes a repository and queries Definition and Evidence as one JSON object", async () => {
   const { root, store } = fixture();
@@ -158,7 +230,8 @@ test("semantic commands build, persist and query a fresh TypeScript overlay", as
 
   const built = await invoke(["semantic", "build", "--repo", root, "--store", store]);
   assert.equal(built.code, 0, JSON.stringify(built.output));
-  assert.equal(built.output.coverage.status, "complete");
+  assert.equal(built.output.coverage.status, "partial");
+  assert.ok(built.output.coverage.reason_codes.includes("implicit_exceptions_not_modeled"));
   assert.ok(built.output.fact_count > 0);
   assert.ok(built.output.evidence_count > 0);
 
@@ -194,6 +267,12 @@ test("semantic commands build, persist and query a fresh TypeScript overlay", as
   assert.equal(observed.code, 0, JSON.stringify(observed.output));
   assert.equal(observed.output.coverage.matched_span_count, 1);
   assert.equal(observed.output.capability_candidates[0].status, "candidate");
+  const decisionArgs = ["--repo", root, "--store", store, "--trace", tracePath, "--candidate-id", observed.output.capability_candidates[0].candidate_id, "--actor", "fixture-human", "--reason", "verified fixture"];
+  const accepted = await invoke(["capability", "accept", ...decisionArgs]);
+  assert.equal(accepted.code, 0, JSON.stringify(accepted.output));
+  const decisions = await invoke(["capability", "list", "--repo", root, "--store", store]);
+  assert.equal(decisions.output[0].capability_id, accepted.output.capability_id);
+  assert.equal(decisions.output[0].status, "accepted");
 
   const answered = await invoke([
     "context", "ask", "--repo", root, "--store", store,
@@ -205,6 +284,8 @@ test("semantic commands build, persist and query a fresh TypeScript overlay", as
   assert.ok(answered.output.answer.findings.length > 0);
 
   writeFileSync(path.join(root, "src", "main.ts"), "export function changed() { return 2; }\n");
+  const staleDecision = await invoke(["capability", "reject", ...decisionArgs, "--expected-version", "1"]);
+  assert.equal(staleDecision.output.error.code, "STALE_SNAPSHOT");
   const rejected = await invoke(["semantic", "build", "--repo", root, "--store", store]);
   assert.equal(rejected.code, 3);
   assert.equal(rejected.output.error.code, "STALE_SNAPSHOT");
@@ -315,4 +396,18 @@ test("graph paths returns ordered shortest simple paths with explicit path budge
   const shallow = await invoke([...arguments_, "--max-depth", "1"]);
   assert.equal(shallow.output.data.paths.length, 0);
   assert.equal(shallow.output.completeness.reason, "max_depth");
+});
+
+
+test("trace run rejects FIFO output without hanging after the command exits", { skip: process.platform === "win32" }, async () => {
+  const { root, store } = fixture();
+  const indexed = await invoke(["index", "--repo", root, "--store", store, "--profile", "semantic-v0"]);
+  assert.equal(indexed.code, 0);
+  const command = "require('node:child_process').execFileSync('mkfifo', [process.env.SCB_TRACE_OUTPUT])";
+  const result = spawnSync(process.execPath, ["--import", "tsx", fileURLToPath(new URL("../../src/cli/main.ts", import.meta.url)),
+    "trace", "run", "--repo", root, "--store", store, "--timeout-ms", "1000", "--", process.execPath, "-e", command],
+    { encoding: "utf8", timeout: 5000 });
+  assert.equal(result.error, undefined, "Trace reader must reject non-regular files within the bounded command lifetime");
+  assert.equal(result.status, 1);
+  assert.equal(JSON.parse(result.stdout).status, "invalid_trace");
 });

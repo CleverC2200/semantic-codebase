@@ -7,6 +7,7 @@ import {
   RepositoryIndexer,
   TypeScriptTreeSitterAdapter,
   canonicalJson,
+  canonicalHash,
   sha256Bytes,
   type Language,
   type RepositorySource,
@@ -14,6 +15,12 @@ import {
 } from "../../src/index.js";
 
 type FixtureFile = [string, Language, string];
+
+test("resolver profile participates in Snapshot configuration identity", () => {
+  const state = new RepositoryIndexer({ adapters: [new TypeScriptTreeSitterAdapter()] }).buildFull(source([["a.ts", "typescript", "function a() {}"]])).state;
+  assert.notEqual(state.index_config_digest, canonicalHash({}));
+  assert.equal(state.index_config_digest, canonicalHash({ resolver_profile_version: "2", options: {} }));
+});
 
 function source(files: FixtureFile[]): RepositorySource {
   return {

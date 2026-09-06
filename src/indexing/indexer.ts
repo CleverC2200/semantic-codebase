@@ -3,7 +3,7 @@ import path from "node:path";
 import { SnapshotCanonicalizer } from "../canonicalization/canonicalizer.js";
 import { canonicalHash } from "../contract/hash.js";
 import type { Language, SyntaxAdapter, SyntaxAdapterManifest, SyntaxSlice } from "../contract/types.js";
-import { DeterministicResolver } from "../resolution/resolver.js";
+import { DeterministicResolver, RESOLVER_PROFILE_VERSION } from "../resolution/resolver.js";
 import type { FrozenRepositoryView, RepositoryManifest } from "../resolution/types.js";
 import type {
   IndexBuildReceipt,
@@ -14,6 +14,7 @@ import type {
   RepositorySourceFile,
 } from "./types.js";
 import { IndexBuildError } from "./types.js";
+import { sourceManifestDigest } from "./source-manifest.js";
 
 export class RepositoryIndexer {
   private readonly adaptersByLanguage: Map<Language, SyntaxAdapter>;
@@ -36,12 +37,12 @@ export class RepositoryIndexer {
       left.language.localeCompare(right.language),
     );
     this.canonicalIrVersion = options.canonical_ir_version ?? "1";
-    this.indexConfigDigest = canonicalHash(options.index_config ?? {});
+    this.indexConfigDigest = canonicalHash({ resolver_profile_version: RESOLVER_PROFILE_VERSION, options: options.index_config ?? {} });
   }
 
   buildFull(source: RepositorySource): IndexBuildResult {
     const files = validateAndSortSource(source);
-    const identity = this.buildIdentity(source.repository_id, files);
+    const identity = this.buildIdentity(source, files);
     const slices = files.map((file) => this.extractFile(source.repository_id, identity.snapshot_id, file));
     return this.finalize(
       source.repository_id,
@@ -65,7 +66,7 @@ export class RepositoryIndexer {
       );
     }
     const files = validateAndSortSource(source);
-    const identity = this.buildIdentity(source.repository_id, files);
+    const identity = this.buildIdentity(source, files);
     const previousSlices = new Map(previous.slices.map((slice) => [slice.file.relative_path, slice]));
     const previousFiles = new Map(previous.manifest.files.map((file) => [file.relative_path, file]));
     const previousProfiles = new Map(
@@ -112,7 +113,7 @@ export class RepositoryIndexer {
     );
   }
 
-  private buildIdentity(repositoryId: string, files: RepositorySourceFile[]) {
+  private buildIdentity(source: RepositorySource, files: RepositorySourceFile[]) {
     const adapter_profile_digest = canonicalHash(this.manifests);
     const manifestFiles = files.map((file) => ({
       relative_path: file.relative_path,
@@ -120,10 +121,10 @@ export class RepositoryIndexer {
       source_digest: file.source_digest,
       byte_length: file.source_bytes.byteLength,
     }));
-    const source_manifest_digest = canonicalHash(manifestFiles);
+    const source_manifest_digest = sourceManifestDigest(source);
     const snapshot_id = canonicalHash({
       type: "snapshot",
-      repository_id: repositoryId,
+      repository_id: source.repository_id,
       source_manifest_digest,
       canonical_ir_version: this.canonicalIrVersion,
       adapter_profile_digest,
@@ -136,6 +137,9 @@ export class RepositoryIndexer {
       source_manifest_digest,
       snapshot_id,
       manifestFiles,
+      configurationFiles: [...(source.configuration_files ?? [])]
+        .sort((a, b) => a.relative_path.localeCompare(b.relative_path))
+        .map((file) => ({ relative_path: file.relative_path, source_digest: file.source_digest, byte_length: file.source_bytes.byteLength })),
     };
   }
 
@@ -179,6 +183,7 @@ export class RepositoryIndexer {
       repository_id: repositoryId,
       snapshot_id: identity.snapshot_id,
       files: identity.manifestFiles,
+      ...(identity.configurationFiles.length ? { configuration_files: identity.configurationFiles } : {}),
     };
     const repository: FrozenRepositoryView = {
       manifest,
@@ -230,6 +235,7 @@ function validateAndSortSource(source: RepositorySource): RepositorySourceFile[]
     const normalizedPath = path.posix.normalize(file.relative_path);
     if (
       !file.relative_path ||
+      file.relative_path === "." || file.relative_path.includes("\\") || file.relative_path.includes("\0") || file.relative_path.endsWith("/") ||
       normalizedPath !== file.relative_path ||
       path.posix.isAbsolute(file.relative_path) ||
       file.relative_path.startsWith("../")

@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { canonicalHash, sha256Bytes } from "../contract/hash.js";
 import type { Language } from "../contract/types.js";
 import type { RepositorySource } from "../indexing/types.js";
+import { sourceManifestDigest } from "../indexing/source-manifest.js";
 
 const EXCLUDED_DIRECTORIES = new Set([
   ".git",
@@ -29,7 +30,7 @@ export interface DiscoveredRepository {
 export function discoverRepository(repositoryPath: string, storePath?: string): DiscoveredRepository {
   if (!repositoryPath) throw new RepositorySourceError("INVALID_ARGUMENT", "--repo is required");
   const root_path = realpathSync(repositoryPath);
-  const files = discoverFiles(root_path)
+  const inputs = discoverFiles(root_path)
     .map(({ absolutePath, relativePath, language }) => {
       const source_bytes = readFileSync(absolutePath);
       return {
@@ -41,10 +42,12 @@ export function discoverRepository(repositoryPath: string, storePath?: string): 
     })
     .sort((left, right) => left.relative_path.localeCompare(right.relative_path));
   const repository_id = canonicalHash({ type: "repository", root_path });
+  const files = inputs.flatMap((file) => file.language ? [{ ...file, language: file.language }] : []);
+  const configuration_files = inputs.filter((file) => !file.language).map(({ language: _language, ...file }) => file);
   return {
     root_path,
     store_path: storePath ? path.resolve(storePath) : defaultStorePath(root_path),
-    source: { repository_id, files },
+    source: { repository_id, files, ...(configuration_files.length ? { configuration_files } : {}) },
   };
 }
 
@@ -63,10 +66,11 @@ function discoverFiles(root: string): ReturnType<typeof walk> {
     ).split("\0").filter(Boolean).flatMap((relativePath) => {
       if (relativePath.split("/").some((segment) => EXCLUDED_DIRECTORIES.has(segment))) return [];
       const language = languageFor(relativePath);
-      if (!language) return [];
+      if (!language && !isConfiguration(relativePath)) return [];
       const absolutePath = path.join(root, relativePath);
       try {
         const stat = lstatSync(absolutePath);
+        if (!language && !realpathSync(absolutePath).startsWith(`${root}${path.sep}`)) return [];
         return stat.isFile() && !stat.isSymbolicLink()
           ? [{ absolutePath, relativePath, language }]
           : [];
@@ -96,7 +100,7 @@ export function repositoryManifestSummary(source: RepositorySource): {
     byte_length: file.source_bytes.byteLength,
   }));
   return {
-    digest: canonicalHash(manifest),
+    digest: sourceManifestDigest(source),
     file_count: manifest.length,
     byte_length: manifest.reduce((total, file) => total + file.byte_length, 0),
   };
@@ -105,7 +109,7 @@ export function repositoryManifestSummary(source: RepositorySource): {
 function walk(root: string, directory: string): Array<{
   absolutePath: string;
   relativePath: string;
-  language: Language;
+  language: Language | null;
 }> {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     if (entry.isSymbolicLink()) return [];
@@ -115,7 +119,7 @@ function walk(root: string, directory: string): Array<{
     }
     if (!entry.isFile()) return [];
     const language = languageFor(entry.name);
-    if (!language) return [];
+    if (!language && !isConfiguration(entry.name)) return [];
     return [{
       absolutePath,
       relativePath: path.relative(root, absolutePath).split(path.sep).join("/"),
@@ -127,6 +131,11 @@ function walk(root: string, directory: string): Array<{
 function languageFor(fileName: string): Language | null {
   if (/\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(fileName) && !/\.d\.ts$/.test(fileName)) return "typescript";
   return fileName.endsWith(".py") ? "python" : null;
+}
+
+function isConfiguration(fileName: string): boolean {
+  return /^(?:tsconfig|pyrightconfig)(?:\.[^/]+)?\.json$/.test(path.posix.basename(fileName)) ||
+    path.posix.basename(fileName) === "package.json" || /\.(?:d\.ts|pyi)$/.test(fileName);
 }
 
 export class RepositorySourceError extends Error {

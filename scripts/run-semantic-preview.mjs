@@ -27,7 +27,8 @@ const outputRoot = path.join(projectRoot, ".workspace/acceptance/semantic-previe
 const storePath = path.join(outputRoot, "preview.sqlite");
 const excludedDirectories = new Set(["tests", "__tests__", "benchmarks", "fixtures"]);
 const focusFile = "packages/zod/src/v3/helpers/parseUtil.ts";
-const tracePath = path.join(projectRoot, "benchmark/corpus/runtime/zod-parse.otlp.json");
+const suppliedTrace = process.argv.find((item) => item.startsWith("--trace="))?.slice("--trace=".length);
+const tracePath = suppliedTrace ? path.resolve(suppliedTrace) : path.join(projectRoot, "benchmark/corpus/runtime/zod-parse.otlp.json");
 const goldPath = path.join(projectRoot, "benchmark/gold/semantic-preview-v0.json");
 const useCodex = process.argv.includes("--codex");
 
@@ -121,7 +122,9 @@ const observedGold = {
   context: { intent: contextPackage.intent, facts: contextPackage.semantic_facts.length },
 };
 const expectedGold = JSON.parse(readFileSync(goldPath, "utf8"));
-if (canonicalJson(observedGold) !== canonicalJson(expectedGold)) {
+if (process.argv.includes("--print-regression-gold")) { console.log(JSON.stringify(observedGold, null, 2)); process.exit(0); }
+const comparableGold = suppliedTrace ? { ...observedGold, runtime: expectedGold.runtime } : observedGold;
+if (canonicalJson(comparableGold) !== canonicalJson(expectedGold)) {
   throw new Error(`Semantic preview does not match benchmark/gold/semantic-preview-v0.json: ${canonicalJson(observedGold)}`);
 }
 if (elapsedMs + pythonElapsedMs > 10000) {
@@ -201,7 +204,8 @@ const receipt = {
     elapsed_ms: pythonElapsedMs,
   },
   runtime: {
-    trace: "benchmark/corpus/runtime/zod-parse.otlp.json",
+    trace: path.relative(projectRoot, tracePath),
+    validation: suppliedTrace ? "external_trace_import_not_frozen_runtime_regression" : "frozen_sample_regression",
     observations: runtime.observations.length,
     matched_observations: runtime.coverage.matched_span_count,
     capability_candidates: runtime.capability_candidates.length,
@@ -288,6 +292,9 @@ function renderHtml({ receipt, overlay, pythonOverlay, runtime, evidenceAnswer, 
     application_flow: "应用主线",
     call_target: "调用目标",
     control_step: "控制步骤",
+    control_flow: "函数内控制流（部分支持）",
+    data_flow: "局部定义使用与参数返回（部分支持）",
+    call_data_flow: "一跳参数返回传播（静态可能）",
     effect: "副作用",
     entrypoint: "入口",
     symbol_type: "符号类型",

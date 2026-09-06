@@ -89,6 +89,20 @@ test("invalid Definition ranges and partial Evidence references are isolated", (
   assert.ok(graph.definitions.every((definition) => definition.file_path !== "src/dep.ts"));
 });
 
+test("graph hashing matches canonical JSON across Unicode and chunk boundaries", () => {
+  for (const count of [0, 1, 300]) {
+    const repository = fixture();
+    const resolution = new DeterministicResolver().resolve(repository);
+    resolution.diagnostics.push(...Array.from({ length: count }, (_, index) => ({
+      code: "probe", severity: "warning" as const, file_path: "src/main.ts",
+      message: `${index}: ${'e\u0301 中文 😀 "\\\n'.repeat(40)}`,
+    })));
+    const graph = new SnapshotCanonicalizer().canonicalize({ repository, resolution });
+    const { graph_hash, ...payload } = graph;
+    assert.equal(graph_hash, canonicalHash(payload));
+  }
+});
+
 test("stale Evidence and missing Evidence block fact publication", () => {
   const repository = fixture();
   const firstSlice = repository.slices[0];

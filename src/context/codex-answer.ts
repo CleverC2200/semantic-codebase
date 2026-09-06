@@ -2,53 +2,96 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { canonicalHash } from "../contract/hash.js";
 
 import { answerContextPackage, validateEvidenceAnswer } from "./evidence-answer.js";
 import type { ContextPackage, EvidenceAnswer } from "./types.js";
 import { ContextPackageError } from "./types.js";
+import { readCodexTelemetry } from "./codex-telemetry.js";
 
-export function answerContextPackageWithCodex(context: ContextPackage): EvidenceAnswer {
+const disabledFeatures = ["shell_tool", "unified_exec", "code_mode_host", "apps", "plugins", "multi_agent", "browser_use", "computer_use", "view_image", "image_generation", "memories", "hooks", "workspace_dependencies", "skill_search", "skill_mcp_dependency_install"];
+
+export function answerContextPackageWithCodex(context: ContextPackage, options: {
+  run?: (args: string[], input: string) => { status: number | null; error?: Error; stdout?: string };
+} = {}): EvidenceAnswer {
   const draft = answerContextPackage(context);
+  const prompt = promptFor(context, draft);
+  const started = performance.now();
+  const receipt: NonNullable<EvidenceAnswer["provider_invocation"]> = {
+    provider: "codex", status: "unavailable", package_hash: context.package_hash,
+    request_hash: canonicalHash({ prompt, tool_policy: "text_only_feature_overrides_v1" }), response_hash: null, started_at: new Date().toISOString(), duration_ms: 0,
+    exit_code: null, input_bytes: Buffer.byteLength(prompt), output_bytes: 0, timeout_ms: 28000,
+    model: "codex-default", tool_policy: "text_only_feature_overrides_v1", validation: "not_run", error_code: null,
+  };
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "semantic-codebase-codex-"));
   const schemaPath = path.join(temporaryRoot, "answer.schema.json");
   const outputPath = path.join(temporaryRoot, "answer.json");
   try {
     writeFileSync(schemaPath, JSON.stringify(rewriteSchema(draft.findings.length)));
-    const result = spawnSync("codex", [
+    const args = [
       "exec",
+      "--json",
       "--ephemeral",
       "--ignore-user-config",
+      ...disabledFeatures.flatMap((feature) => ["--disable", feature]),
+      "-c", 'web_search="disabled"',
+      "-c", "project_doc_max_bytes=0",
+      "-c", 'approval_policy="never"',
+      "-c", "features.skip_host_skill_discovery=true",
       "--sandbox", "read-only",
       "--skip-git-repo-check",
       "--cd", temporaryRoot,
       "--output-schema", schemaPath,
       "--output-last-message", outputPath,
       "-",
-    ], {
-      input: promptFor(context, draft),
-      encoding: "utf8",
-      maxBuffer: 8 * 1024 * 1024,
+    ];
+    const result = options.run ? options.run(args, prompt) : spawnSync("codex", args, {
+      input: prompt, encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: receipt.timeout_ms,
     });
+    receipt.exit_code = result.status;
+    receipt.telemetry = readCodexTelemetry(result.stdout ?? "", { expectedPolicy: receipt.tool_policy });
     if (result.status !== 0) {
       throw new ContextPackageError(
         "CODEX_ANSWER_FAILED",
-        result.stderr.trim() || result.error?.message || "Codex did not return an Evidence Answer",
+        "Codex unavailable or timed out; deterministic evidence remains available",
       );
     }
-    const rewrite = JSON.parse(readFileSync(outputPath, "utf8")) as {
+    receipt.status = "invalid_response";
+    const raw = readFileSync(outputPath, "utf8");
+    receipt.output_bytes = Buffer.byteLength(raw);
+    receipt.response_hash = canonicalHash(raw);
+    const rewrite = JSON.parse(raw) as {
       summary: string;
       finding_texts: string[];
     };
+    if (!rewrite || typeof rewrite.summary !== "string" || !Array.isArray(rewrite.finding_texts) ||
+        rewrite.finding_texts.length !== draft.findings.length || rewrite.finding_texts.some((text) => typeof text !== "string") ||
+        Object.keys(rewrite).some((key) => !["summary", "finding_texts"].includes(key))) {
+      throw new ContextPackageError("CODEX_INVALID_RESPONSE", "Codex response does not match the presentation schema");
+    }
     const answer: EvidenceAnswer = {
       ...draft,
-      summary: rewrite.summary,
-      findings: draft.findings.map((finding, index) => ({ ...finding, text: rewrite.finding_texts[index]! })),
+      presentation: { basis: "llm_inferred", verified: false, summary: rewrite.summary, finding_texts: rewrite.finding_texts },
     };
     validateEvidenceAnswer(context, answer);
-    return answer;
+    receipt.status = "succeeded";
+    receipt.validation = "passed";
+    receipt.duration_ms = Math.round(performance.now() - started);
+    if (receipt.telemetry.assessment === "completed_with_warnings") {
+      return { ...answer, status: "partial", unknowns: [...answer.unknowns, "codex_expected_policy_warnings"], provider_invocation: receipt };
+    }
+    if (receipt.telemetry.assessment !== "clean") {
+      return { ...answer, status: "partial", unknowns: [...answer.unknowns, "codex_execution_requires_review"], provider_invocation: receipt };
+    }
+    return { ...answer, provider_invocation: receipt };
   } catch (error) {
-    if (error instanceof ContextPackageError) throw error;
-    throw new ContextPackageError("CODEX_ANSWER_FAILED", error instanceof Error ? error.message : String(error));
+    receipt.error_code = error instanceof ContextPackageError ? error.code : "CODEX_INVALID_RESPONSE";
+    receipt.validation = receipt.status === "invalid_response" ? "failed" : "not_run";
+    receipt.duration_ms = Math.round(performance.now() - started);
+    const answer: EvidenceAnswer = { ...draft, status: "partial",
+      unknowns: [...draft.unknowns, "answer_provider_unavailable"], provider_invocation: receipt };
+    validateEvidenceAnswer(context, answer);
+    return answer;
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }

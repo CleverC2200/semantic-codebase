@@ -155,10 +155,17 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
     });
     const relationCandidates = uniqueByLocalId(candidateExtraction.candidates);
     const allEvidence = uniqueByLocalId([...evidence, ...candidateExtraction.evidence]);
+    const evidenceById = new Map(allEvidence.map((item, index) => [item.local_id, { item, index }]));
+    const candidateEvidence = new Map(relationCandidates.map((candidate) => {
+      let first: { item: EvidenceDraft; index: number } | undefined;
+      for (const id of candidate.evidence_local_ids) {
+        const located = evidenceById.get(id);
+        if (located && (!first || located.index < first.index)) first = located;
+      }
+      return [candidate.local_id, first?.item] as const;
+    }));
     const candidateDiagnostics = relationCandidates.map((candidate) => {
-      const candidateEvidenceItem = allEvidence.find((item) =>
-        candidate.evidence_local_ids.includes(item.local_id),
-      );
+      const candidateEvidenceItem = candidateEvidence.get(candidate.local_id);
       return {
         code: "unresolved_relation_candidate",
         severity: "info" as const,
@@ -180,10 +187,10 @@ export abstract class TreeSitterSyntaxAdapter implements SyntaxAdapter {
       definitions: definitions.sort(compareDefinitions),
       exact_relations: exactRelations.sort(compareRelations),
       relation_candidates: relationCandidates.sort((left, right) => {
-        const leftSpan = evidenceSpan(left.evidence_local_ids, allEvidence);
-        const rightSpan = evidenceSpan(right.evidence_local_ids, allEvidence);
+        const leftStart = candidateEvidence.get(left.local_id)?.span.start_byte ?? Number.MAX_SAFE_INTEGER;
+        const rightStart = candidateEvidence.get(right.local_id)?.span.start_byte ?? Number.MAX_SAFE_INTEGER;
         return (
-          leftSpan.start_byte - rightSpan.start_byte ||
+          leftStart - rightStart ||
           left.kind.localeCompare(right.kind) ||
           sourceRefKey(left.source_local_ref).localeCompare(sourceRefKey(right.source_local_ref)) ||
           left.local_id.localeCompare(right.local_id)
@@ -388,6 +395,9 @@ function collectSyntaxDiagnostics(
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const visit = (node: Parser.SyntaxNode): void => {
+    // Tree-sitter propagates this flag through ancestors. Valid subtrees need
+    // no JS node wrappers just to establish the absence of syntax diagnostics.
+    if (!node.hasError && !node.isMissing) return;
     if (node.isError) {
       diagnostics.push({
         code: "syntax_error",
@@ -418,11 +428,10 @@ function createUtf8OffsetMap(sourceText: string): Utf8OffsetMap {
   for (let index = 0; index < sourceText.length; ) {
     const codePoint = sourceText.codePointAt(index);
     if (codePoint === undefined) break;
-    const character = String.fromCodePoint(codePoint);
-    const width = character.length;
+    const width = codePoint > 0xffff ? 2 : 1;
     offsets[index] = byteOffset;
     if (width === 2) offsets[index + 1] = byteOffset;
-    byteOffset += Buffer.byteLength(character, "utf8");
+    byteOffset += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
     index += width;
     offsets[index] = byteOffset;
   }
@@ -499,11 +508,4 @@ function compareDiagnostics(left: Diagnostic, right: Diagnostic): number {
     left.code.localeCompare(right.code) ||
     left.message.localeCompare(right.message)
   );
-}
-
-function evidenceSpan(localIds: string[], evidence: EvidenceDraft[]): ByteSpan {
-  return evidence.find((item) => localIds.includes(item.local_id))?.span ?? {
-    start_byte: Number.MAX_SAFE_INTEGER,
-    end_byte: Number.MAX_SAFE_INTEGER,
-  };
 }

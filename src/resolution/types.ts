@@ -17,6 +17,7 @@ export interface RepositoryManifest {
   repository_id: string;
   snapshot_id: string;
   files: RepositoryManifestFile[];
+  configuration_files?: Omit<RepositoryManifestFile, "language">[];
 }
 
 export interface FrozenRepositoryView {
