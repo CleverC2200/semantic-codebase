@@ -46,7 +46,19 @@ async function mcp(name: string, arguments_: Record<string, unknown>) {
   return result.structuredContent as any;
 }
 
-test("MCP exposes six read-only tools with closed input schemas", async () => {
+test("semantic answers have CLI/MCP parity without mutating the database", async () => {
+  const { root, store } = fixture();
+  await cli(["index", "--repo", root, "--store", store]);
+  await cli(["semantic", "build", "--repo", root, "--store", store]);
+  const question = "originNode 的调用路径";
+  const expected = await cli(["context", "ask", "--repo", root, "--store", store, "--question", question]);
+  const before = statSync(store).mtimeMs;
+  const actual = await mcp("semantic_codebase_ask", { repo: root, store, question });
+  assert.deepEqual(actual, expected);
+  assert.equal(statSync(store).mtimeMs, before);
+});
+
+test("MCP exposes seven read-only tools with closed input schemas", async () => {
   const initialized = await handleMcpRequest({
     jsonrpc: "2.0",
     id: 1,
@@ -56,7 +68,7 @@ test("MCP exposes six read-only tools with closed input schemas", async () => {
   assert.equal((initialized?.result as any).serverInfo.name, "semantic-codebase");
   assert.equal((initialized?.result as any).protocolVersion, "2025-11-25");
   const listed = await handleMcpRequest({ jsonrpc: "2.0", id: 2, method: "tools/list" });
-  assert.equal(((listed?.result as any).tools as unknown[]).length, 6);
+  assert.equal(((listed?.result as any).tools as unknown[]).length, 7);
   assert.deepEqual(
     MCP_TOOLS.map((tool) => tool.name),
     [
@@ -66,6 +78,7 @@ test("MCP exposes six read-only tools with closed input schemas", async () => {
       "semantic_codebase_get_evidence",
       "semantic_codebase_traverse",
       "semantic_codebase_find_paths",
+      "semantic_codebase_ask",
     ],
   );
   assert.ok(MCP_TOOLS.every((tool) => tool.inputSchema.additionalProperties === false));

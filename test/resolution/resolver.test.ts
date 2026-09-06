@@ -6,6 +6,7 @@ import {
   PythonTreeSitterAdapter,
   TypeScriptTreeSitterAdapter,
   canonicalHash,
+  RepositoryIndexer,
   sha256Bytes,
   type FrozenRepositoryView,
   type SyntaxAdapter,
@@ -56,6 +57,33 @@ function resolvedKinds(repository: FrozenRepositoryView): string[] {
     return kind;
   });
 }
+
+test("candidate sorting serializes each payload once rather than per comparison", () => {
+  const repository = view([["main.ts", `function main() { ${Array.from({ length: 100 }, (_, i) => `missing${i}();`).join(" ")} }`]]);
+  // Count reads of a serialization-only field; resolution itself does not inspect it.
+  let reads = 0;
+  for (const candidate of repository.slices[0]!.relation_candidates) {
+    Object.defineProperty(candidate, "sorting_probe", { enumerable: true, get: () => { reads++; return "unchanged"; } });
+  }
+  const result = new DeterministicResolver().resolve(repository);
+  assert.equal(result.coverage.unresolved_count, 100);
+  assert.ok(reads <= 2 * 100, `payload serialized repeatedly: ${reads} field reads`);
+});
+
+test("Python local imports and class-body calls stay candidates under the structural contract", () => {
+  const files = [["dep.py", "def helper():\n    return 1\n"], ["main.py", "from dep import helper\nclass Box:\n    value = helper()\n    def run(self):\n        from dep import helper\n        return helper()\n"]].map(([relative_path, text]) => {
+    const source_bytes = Buffer.from(text!);
+    return { relative_path: relative_path!, language: "python" as const, source_bytes, source_digest: sha256Bytes(source_bytes) };
+  });
+  const state = new RepositoryIndexer({ adapters: [new PythonTreeSitterAdapter()] }).buildFull({ repository_id: "local-imports", files }).state;
+  assert.equal(state.graph.coverage.status, "ready");
+  assert.ok(state.graph.unresolved_candidates.some((item) => item.kind === "IMPORTS" && item.source_local_ref.kind === "definition"));
+  assert.ok(state.graph.unresolved_candidates.some((item) => item.kind === "CALLS" && item.source_local_ref.kind === "definition"));
+  assert.ok(state.graph.relations.some((item) => item.kind === "IMPORTS" && item.source.kind === "source_file"));
+  const run = state.graph.definitions.find((item) => item.name === "run")!;
+  assert.ok(!state.graph.relations.some((item) => item.kind === "CALLS" && item.source.kind === "definition" && item.source.definition_key === run.definition_key));
+  assert.ok(state.graph.diagnostics.some((item) => item.code === "unsupported_relation_source"));
+});
 
 test("resolver promotes only unique same-file and explicit import targets", () => {
   const repository = view([

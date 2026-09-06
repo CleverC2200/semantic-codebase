@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { DefinitionContext } from "../../src/syntax/tree-sitter/base-adapter.js";
 
 import {
   PythonTreeSitterAdapter,
@@ -21,6 +22,25 @@ function extract(adapter: SyntaxAdapter, source: string, language: Language, pat
     source_digest: sha256Bytes(source_bytes),
   });
 }
+
+test("candidate Evidence lookup does not rescan all rows during sorting", () => {
+  let reads = 0;
+  class CountingAdapter extends TypeScriptTreeSitterAdapter {
+    protected override collectRelationCandidates(context: DefinitionContext) {
+      const result = super.collectRelationCandidates(context);
+      return { ...result, evidence: result.evidence.map((item) => {
+        const id = item.local_id;
+        return { ...item, get local_id() { reads++; return id; } };
+      }) };
+    }
+  }
+  const source = Array.from({ length: 100 }, (_, index) => `call${index}();`).join("\n");
+  const slice = extract(new CountingAdapter(), source, "typescript", "calls.ts");
+  assert.equal(slice.relation_candidates.length, 100);
+  assert.equal(slice.coverage.error_count, 0);
+  assert.ok(reads < 2000, `Evidence ID read ${reads} times for 100 calls`);
+  assert.equal(canonicalHash(slice), canonicalHash(extract(new TypeScriptTreeSitterAdapter(), source, "typescript", "calls.ts")));
+});
 
 test("TypeScript candidates preserve aliases, calls and heritage without target keys", () => {
   const source = [

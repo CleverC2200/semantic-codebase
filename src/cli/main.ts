@@ -16,10 +16,15 @@ import { DefinitionQueryService } from "../query/definition-query.js";
 import { GraphQueryService } from "../query/graph-query.js";
 import { QueryError } from "../query/types.js";
 import { importOpenTelemetryJson, RuntimeImportError } from "../runtime/index.js";
+import { CapabilityRegistry } from "../runtime/capability-registry.js";
+import { runTrace } from "../runtime/trace-runner.js";
+import { renderAnswerMarkdown } from "../context/markdown.js";
+import type { ContextPackage, EvidenceAnswer } from "../context/types.js";
 import {
   SEMANTIC_FACT_KINDS,
   SemanticEnrichmentError,
   SemanticRepositoryEnricher,
+  SEMANTIC_ENGINE_PROFILE,
   type SemanticFactKind,
 } from "../semantic/index.js";
 import {
@@ -40,18 +45,29 @@ interface CliIo {
 interface ParsedArguments {
   command: string[];
   options: Map<string, string>;
+  execution?: string[];
 }
 
 export async function runCli(argv: string[], io: CliIo = process): Promise<number> {
   try {
     const parsed = parseArguments(argv);
+    if (parsed.command.join(" ") === "ask") parsed.command = ["context", "ask"];
     validateCommandOptions(parsed);
+    const format = parsed.options.get("format") ?? "json";
+    if (!["json", "markdown"].includes(format)) throw new QueryError("INVALID_ARGUMENT", "format must be json or markdown");
     const repositoryPath = requiredOption(parsed, "repo");
     const discovered = discoverRepository(repositoryPath, parsed.options.get("store"));
     const store = new SqliteSnapshotStore(discovered.store_path);
     try {
-      const output = execute(parsed, discovered, store);
-      io.stdout.write(`${canonicalJson(output)}\n`);
+      const output = await execute(parsed, discovered, store);
+      if (format === "markdown") {
+        const result = output as { context: ContextPackage; answer: EvidenceAnswer };
+        io.stdout.write(renderAnswerMarkdown(result.context, result.answer));
+      } else io.stdout.write(`${canonicalJson(output)}\n`);
+      if (parsed.command.join(" ") === "trace run") {
+        const receipt = output as Awaited<ReturnType<typeof runTrace>>;
+        return receipt.execution.exit_code === 0 && receipt.status === "imported" ? 0 : 1;
+      }
       return 0;
     } finally {
       store.close();
@@ -69,13 +85,45 @@ function execute(
   store: SqliteSnapshotStore,
 ): unknown {
   const command = parsed.command.join(" ");
+  if (command === "trace run") {
+    const state = store.getCurrentReady(discovered.source.repository_id);
+    if (!state) throw new QueryError("NO_READY_SNAPSHOT", "Repository has no Ready Snapshot");
+    const overlay = store.getSemanticOverlay(state.repository_id, state.snapshot_id);
+    if (!overlay) throw new QueryError("SEMANTIC_OVERLAY_NOT_FOUND", "Snapshot has no Semantic Overlay");
+    return runTrace({ root: discovered.root_path, state, overlay, argv: parsed.execution ?? [], timeout_ms: numberOption(parsed, "timeout-ms") });
+  }
+  if (command.startsWith("capability ")) {
+    const state = store.getCurrentReady(discovered.source.repository_id);
+    if (!state) throw new QueryError("NO_READY_SNAPSHOT", "Repository has no Ready Snapshot");
+    const registry = new CapabilityRegistry(discovered.store_path);
+    try {
+      if (command === "capability list") return registry.list(state.repository_id, state.snapshot_id);
+      if (repositoryManifestSummary(discovered.source).digest !== state.source_manifest_digest) throw new QueryError("STALE_SNAPSHOT", "Cannot confirm capabilities against stale source");
+      const overlay = store.getSemanticOverlay(state.repository_id, state.snapshot_id);
+      if (!overlay) throw new QueryError("SEMANTIC_OVERLAY_NOT_FOUND", "Snapshot has no Semantic Overlay");
+      const runtime = importOpenTelemetryJson({ repository_id: state.repository_id, snapshot_id: state.snapshot_id, definitions: state.graph.definitions, overlay,
+        trace: JSON.parse(readFileSync(requiredOption(parsed, "trace"), "utf8")) });
+      return registry.decide({ runtime, candidate_id: requiredOption(parsed, "candidate-id"), action: command.split(" ")[1] as "accept" | "reject" | "merge" | "revalidate",
+        capability_id: parsed.options.get("capability-id"),
+        actor: requiredOption(parsed, "actor"), reason: requiredOption(parsed, "reason"), title: parsed.options.get("title"), into_id: parsed.options.get("into-id"),
+        expected_version: numberOption(parsed, "expected-version") ?? 0 });
+    } finally { registry.close(); }
+  }
   if (command === "index" || command === "sync") {
-    const indexer = createIndexer();
+    const profile = parsed.options.get("profile");
+    if (profile && profile !== "semantic-v0") throw new QueryError("INVALID_ARGUMENT", "Only semantic-v0 is supported");
     const previous = command === "sync" ? store.getCurrentReady(discovered.source.repository_id) : null;
+    const semantic = profile === "semantic-v0" || Boolean(previous && store.getSemanticOverlay(previous.repository_id, previous.snapshot_id));
+    const indexer = createIndexer(semantic);
     const result = previous
       ? indexer.buildIncremental(previous, discovered.source)
       : indexer.buildFull(discovered.source);
-    return publishIndexResult(command, discovered, store, result);
+    const overlay = semantic ? new SemanticRepositoryEnricher().enrich({ state: result.state, source: discovered.source }) : null;
+    const output = publishIndexResult(command, discovered, store, result, overlay);
+    if (overlay) {
+      return { ...output, semantic: { overlay_hash: overlay.overlay_hash, coverage: overlay.coverage, fact_count: overlay.facts.length } };
+    }
+    return output;
   }
   if (command === "status") {
     return repositoryStatus(discovered, store);
@@ -147,7 +195,7 @@ function execute(
       coverage: overlay.coverage,
     };
   }
-  if (command === "runtime import") {
+  if (command === "runtime import" || command === "trace import") {
     const state = store.getCurrentReady(discovered.source.repository_id);
     if (!state) throw new QueryError("NO_READY_SNAPSHOT", "Repository has no Ready Snapshot");
     const overlay = store.getSemanticOverlay(state.repository_id, state.snapshot_id);
@@ -176,6 +224,10 @@ function execute(
           trace: JSON.parse(readFileSync(parsed.options.get("trace")!, "utf8")) as unknown,
         })
       : null;
+    const registry = new CapabilityRegistry(discovered.store_path, { read_only: true });
+    let capabilities;
+    try { capabilities = registry.confirmed(state.repository_id, state.snapshot_id); }
+    finally { registry.close(); }
     const context = buildContextPackage({
       state,
       overlay,
@@ -184,6 +236,8 @@ function execute(
       ...(parsed.options.get("definition-key") ? { definition_key: parsed.options.get("definition-key") } : {}),
       ...(numberOption(parsed, "max-results") !== undefined ? { max_facts: numberOption(parsed, "max-results") } : {}),
       runtime,
+      capabilities,
+      source_freshness: repositoryManifestSummary(discovered.source).digest === state.source_manifest_digest ? "fresh" : "stale",
     });
     const answer = parsed.options.get("codex") === "true"
       ? answerContextPackageWithCodex(context)
@@ -251,10 +305,10 @@ function execute(
   throw new QueryError("INVALID_ARGUMENT", `Unknown command: ${command || "<empty>"}`);
 }
 
-function createIndexer(): RepositoryIndexer {
+function createIndexer(semantic = false): RepositoryIndexer {
   return new RepositoryIndexer({
     adapters: [new TypeScriptTreeSitterAdapter(), new PythonTreeSitterAdapter()],
-    index_config: { excluded_directories: "v1-defaults" },
+    index_config: { excluded_directories: "v1-defaults", ...(semantic ? { semantic_engine: SEMANTIC_ENGINE_PROFILE } : {}) },
   });
 }
 
@@ -263,7 +317,8 @@ function publishIndexResult(
   discovered: ReturnType<typeof discoverRepository>,
   store: SqliteSnapshotStore,
   result: IndexBuildResult,
-): unknown {
+  overlay: import("../semantic/types.js").SemanticOverlay | null = null,
+) {
   const existing = store.getSnapshotSummary(discovered.source.repository_id, result.state.snapshot_id);
   const verifyObservedManifest = () => {
     const observed = discoverRepository(discovered.root_path, discovered.store_path);
@@ -271,7 +326,9 @@ function publishIndexResult(
       throw new QueryError("INDEX_BUILD_FAILED", "Repository Manifest changed during index publication");
     }
   };
-  if (existing && ["ready", "superseded"].includes(existing.status)) {
+  if (overlay) {
+    store.publishSemanticReady(result.state, overlay, { before_commit: verifyObservedManifest });
+  } else if (existing && ["ready", "superseded"].includes(existing.status)) {
     verifyObservedManifest();
     store.activateReady(discovered.source.repository_id, result.state.snapshot_id);
   } else {
@@ -301,6 +358,10 @@ function parseArguments(argv: string[]): ParsedArguments {
   const options = new Map<string, string>();
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
+    if (argument === "--") {
+      if (command.join(" ") !== "trace run") throw new QueryError("INVALID_ARGUMENT", "Only trace run accepts an execution command");
+      return { command, options, execution: argv.slice(index + 1) };
+    }
     if (!argument.startsWith("--")) {
       if (options.size > 0) throw new QueryError("INVALID_ARGUMENT", `Unexpected argument: ${argument}`);
       command.push(argument);
@@ -328,14 +389,21 @@ function validateCommandOptions(parsed: ParsedArguments): void {
   const common = ["repo", "store"];
   const queryScope = [...common, "snapshot", "require-fresh"];
   const allowedByCommand: Record<string, string[]> = {
-    index: common,
-    sync: common,
+    index: [...common, "profile"],
+    sync: [...common, "profile"],
     status: common,
     "semantic build": common,
     "semantic status": common,
     "semantic facts": [...queryScope, "file-path", "definition-key", "kind", "max-results"],
     "runtime import": [...common, "trace"],
-    "context ask": [...common, "question", "file-path", "definition-key", "max-results", "trace", "codex"],
+    "trace import": [...common, "trace"],
+    "trace run": [...common, "timeout-ms"],
+    "capability list": common,
+    "capability accept": [...common, "trace", "candidate-id", "actor", "reason", "title", "expected-version"],
+    "capability reject": [...common, "trace", "candidate-id", "actor", "reason", "expected-version"],
+    "capability merge": [...common, "trace", "candidate-id", "actor", "reason", "into-id", "expected-version"],
+    "capability revalidate": [...common, "trace", "candidate-id", "capability-id", "actor", "reason", "title", "expected-version"],
+    "context ask": [...common, "question", "file-path", "definition-key", "max-results", "trace", "codex", "format"],
     "definitions find": [...queryScope, "query", "kind", "file-path", "max-results"],
     "definition get": [...queryScope, "definition-key"],
     "evidence get": [...queryScope, "evidence-id", "source-bytes"],

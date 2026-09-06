@@ -21,6 +21,8 @@ import {
 import { repositoryStatus } from "../repository/status.js";
 import { SqliteSnapshotStore } from "../store/sqlite-store.js";
 import { SnapshotStoreError } from "../store/types.js";
+import { answerContextPackage, buildContextPackage, ContextPackageError } from "../context/index.js";
+import { CapabilityRegistry } from "../runtime/capability-registry.js";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -90,6 +92,10 @@ export const MCP_TOOLS: Array<{
     max_paths: { type: "number", minimum: 1, maximum: 100 },
     timeout_ms: { type: "number", minimum: 1, maximum: 10000 },
   }, ["start_definition_key", "end_definition_key"]),
+  tool("semantic_codebase_ask", "从当前 Semantic Overlay 生成本地受控查询与证据答案，不调用模型。", {
+    question: { type: "string" }, file_path: { type: "string" }, definition_key: { type: "string" },
+    max_results: { type: "number", minimum: 1, maximum: 500 },
+  }, ["question"]),
 ];
 
 export async function handleMcpRequest(request: JsonRpcRequest): Promise<Record<string, unknown> | null> {
@@ -148,6 +154,22 @@ export async function callMcpTool(name: string, rawArguments: unknown): Promise<
         require_fresh: args.require_fresh === true,
       };
       const definitions = new DefinitionQueryService(store);
+      if (name === "semantic_codebase_ask") {
+        if (args.snapshot && args.snapshot !== "current_ready") throw new QueryError("INVALID_ARGUMENT", "Semantic ask currently requires current_ready");
+        const state = store.getCurrentReady(discovered.source.repository_id);
+        if (!state) throw new QueryError("NO_READY_SNAPSHOT", "Repository has no Ready Snapshot");
+        const overlay = store.getSemanticOverlay(state.repository_id, state.snapshot_id);
+        if (!overlay) throw new QueryError("SEMANTIC_OVERLAY_NOT_FOUND", "Snapshot has no Semantic Overlay");
+        if (args.require_fresh && state.source_manifest_digest !== observed.digest) throw new QueryError("STALE_SNAPSHOT", "Indexed source is stale");
+        const registry = new CapabilityRegistry(discovered.store_path, { read_only: true });
+        try {
+          const context = buildContextPackage({ state, overlay, question: args.question as string,
+            file_path: args.file_path as string | undefined, definition_key: args.definition_key as string | undefined,
+            max_facts: args.max_results as number | undefined, capabilities: registry.confirmed(state.repository_id, state.snapshot_id),
+            source_freshness: state.source_manifest_digest === observed.digest ? "fresh" : "stale" });
+          return success({ schema_version: 1, context, answer: answerContextPackage(context) });
+        } finally { registry.close(); }
+      }
       if (name === "semantic_codebase_find_definitions") {
         return success(definitions.findDefinitions({
           ...scope,
@@ -205,7 +227,7 @@ export async function callMcpTool(name: string, rawArguments: unknown): Promise<
 }
 
 function normalizeToolError(error: unknown): { code: string; message: string } {
-  if (error instanceof QueryError || error instanceof SnapshotStoreError || error instanceof RepositorySourceError) {
+  if (error instanceof QueryError || error instanceof SnapshotStoreError || error instanceof RepositorySourceError || error instanceof ContextPackageError) {
     return { code: error.code, message: error.message };
   }
   if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {

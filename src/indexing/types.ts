@@ -17,6 +17,7 @@ export interface RepositorySourceFile {
 export interface RepositorySource {
   repository_id: string;
   files: RepositorySourceFile[];
+  configuration_files?: Omit<RepositorySourceFile, "language">[];
 }
 
 export interface IndexState {

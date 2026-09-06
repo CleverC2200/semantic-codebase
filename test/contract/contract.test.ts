@@ -37,6 +37,19 @@ test("canonical JSON sorts object keys, preserves array order and normalizes Uni
   assert.equal(canonicalHash(first), canonicalHash(second));
 });
 
+test("canonical object construction preserves special keys and normalized-key collisions", () => {
+  const value = JSON.parse('{"__proto__":{"x":1},"é":2,"é":3,"10":10,"2":2}');
+  assert.equal(canonicalJson(value), '{"2":2,"10":10,"__proto__":{"x":1},"é":3}');
+  assert.throws(() => canonicalJson({ x: undefined }), /undefined/);
+});
+
+test("canonical text matches NFC for ASCII controls and Unicode boundaries", () => {
+  const values = [Array.from({ length: 128 }, (_, index) => String.fromCharCode(index)).join(""), "e\u0301", "中文🙂", "\u1100\u1161", "\ud800", "\udfff", "x\u0080y", "\uffff", "", "abc/0123456789"];
+  for (const value of values) {
+    assert.equal(canonicalJson({ [value]: value }), JSON.stringify({ [value.normalize("NFC")]: value.normalize("NFC") }));
+  }
+});
+
 test("digest mismatch produces a stable failed slice through the public interface", () => {
   const bytes = new TextEncoder().encode("const x = 1;\r\n");
   const input = {

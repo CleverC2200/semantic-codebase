@@ -11,6 +11,8 @@
     "scb-mcp": "./dist/mcp/server.js"
   },
   "scripts": {
+    "postinstall": "node scripts/prepare-typescript-grammar.mjs",
+    "prepare:grammar": "node scripts/prepare-typescript-grammar.mjs",
     "build": "tsc -p tsconfig.json && node scripts/copy-query-assets.mjs",
     "test": "node --import tsx --test test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -18,6 +20,12 @@
     "benchmark:syntax": "npm run build && node --expose-gc scripts/benchmark-syntax.mjs",
     "corpus:zod": "npm run build && node scripts/generate-zod-smoke.mjs",
     "preview:semantic": "npm run build && node scripts/run-semantic-preview.mjs",
+    "capture:zod": "npm run build && node --import tsx scripts/capture-zod-runtime.mjs",
+    "demo:local": "npm run build && node scripts/run-local-v0.mjs",
+    "verify:semantic-release": "npm run verify:source-review && node --expose-gc scripts/verify-semantic-release.mjs",
+    "verify:source-review": "npm run build && node scripts/prepare-release-review.mjs && node scripts/check-release-review.mjs && node scripts/review-source-checkpoints.mjs",
+    "verify:real-e2e": "npm run verify:source-review && node scripts/verify-real-corpus-e2e.mjs",
+    "verify:engine-soak": "npm run build && node --expose-gc scripts/soak-semantic-engine.mjs",
     "prototype:zod": "npm run build && node scripts/run-zod-prototype-gate.mjs"
   },
   "engines": {
@@ -26,9 +34,11 @@
   "dependencies": {
     "tree-sitter": "0.21.1",
     "tree-sitter-python": "0.21.0",
-    "tree-sitter-typescript": "0.23.2"
+    "tree-sitter-typescript": "https://codeload.github.com/tree-sitter/tree-sitter-typescript/tar.gz/465aa162d077093dc5ad4f46a9463bde6274425e"
   },
   "devDependencies": {
+    "tree-sitter-cli": "0.24.7",
+    "node-gyp": "11.5.0",
     "@types/node": "24.10.1",
     "pyright": "^1.1.413",
     "tsx": "4.23.12",

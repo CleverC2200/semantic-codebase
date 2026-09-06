@@ -31,6 +31,7 @@ const require = createRequire(import.meta.url);
 
 export class SqliteSnapshotStore implements SnapshotStore {
   private readonly database: DatabaseSyncType;
+  private transactionDepth = 0;
 
   constructor(
     readonly databasePath: string,
@@ -69,6 +70,23 @@ export class SqliteSnapshotStore implements SnapshotStore {
           "INSERT INTO snapshots(repository_id, snapshot_id, status) VALUES (?, ?, 'building')",
         ).run(repositoryId, snapshotId);
       }
+    });
+  }
+
+  publishSemanticReady(state: IndexState, overlay: SemanticOverlay, options: { before_commit?: () => void } = {}): void {
+    if (state.repository_id !== overlay.repository_id || state.snapshot_id !== overlay.snapshot_id || state.graph.graph_hash !== overlay.structural_graph_hash) {
+      throw new SnapshotStoreError("STORE_INTEGRITY_ERROR", "Snapshot and Overlay must share one identity");
+    }
+    this.transaction(() => {
+      const existing = this.snapshotRow(state.repository_id, state.snapshot_id);
+      if (existing && ["ready", "superseded"].includes(existing.status)) {
+        this.activateReady(state.repository_id, state.snapshot_id);
+      } else {
+        this.beginBuild(state.repository_id, state.snapshot_id);
+        this.publishReady(state);
+      }
+      this.publishSemanticOverlay(overlay);
+      options.before_commit?.();
     });
   }
 
@@ -647,14 +665,20 @@ export class SqliteSnapshotStore implements SnapshotStore {
   }
 
   private transaction<T>(operation: () => T): T {
-    this.database.exec("BEGIN IMMEDIATE");
+    const depth = this.transactionDepth;
+    const savepoint = `scb_nested_${depth}`;
+    this.database.exec(depth === 0 ? "BEGIN IMMEDIATE" : `SAVEPOINT ${savepoint}`);
+    this.transactionDepth++;
     try {
       const result = operation();
-      this.database.exec("COMMIT");
+      this.database.exec(depth === 0 ? "COMMIT" : `RELEASE SAVEPOINT ${savepoint}`);
       return result;
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      if (depth === 0) this.database.exec("ROLLBACK");
+      else this.database.exec(`ROLLBACK TO SAVEPOINT ${savepoint}; RELEASE SAVEPOINT ${savepoint}`);
       throw error;
+    } finally {
+      this.transactionDepth--;
     }
   }
 }

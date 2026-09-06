@@ -159,3 +159,28 @@ test("SQLite Store publishes one immutable Semantic Overlay and filters its raw 
   );
   database.close();
 });
+
+test("combined semantic publication rolls back the pointer and both layers after late failure", () => {
+  const database = store();
+  const observer = new SqliteSnapshotStore(database.databasePath, { read_only: true });
+  const first = state(1);
+  database.beginBuild(first.repository_id, first.snapshot_id);
+  database.publishReady(first);
+  const source_bytes = Buffer.from("export function value() { return 2; }\n");
+  const source: RepositorySource = { repository_id: "repo", files: [{ relative_path: "src/value.ts", language: "typescript", source_bytes, source_digest: sha256Bytes(source_bytes) }] };
+  const second = new RepositoryIndexer({ adapters: [new TypeScriptTreeSitterAdapter()] }).buildFull(source).state;
+  const overlay = new TypeScriptSemanticEnricher().enrich({ state: second, source });
+  assert.throws(() => database.publishSemanticReady(second, overlay, { before_commit: () => {
+    assert.equal(observer.getCurrentReady("repo")?.snapshot_id, first.snapshot_id);
+    assert.equal(observer.getSemanticOverlay("repo", second.snapshot_id), null);
+    throw new Error("injected late publication failure");
+  } }), /injected late/);
+  assert.equal(database.getCurrentReady("repo")?.snapshot_id, first.snapshot_id);
+  assert.equal(database.getSemanticOverlay("repo", second.snapshot_id), null);
+  assert.equal(database.getSnapshotSummary("repo", second.snapshot_id), null);
+  database.publishSemanticReady(second, overlay);
+  assert.equal(observer.getCurrentReady("repo")?.snapshot_id, second.snapshot_id);
+  assert.equal(observer.getSemanticOverlay("repo", second.snapshot_id)?.overlay_hash, overlay.overlay_hash);
+  database.publishSemanticReady(second, overlay);
+  observer.close(); database.close();
+});

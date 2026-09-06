@@ -38,8 +38,12 @@ export function importOpenTelemetryJson(input: {
   const traceDigest = canonicalHash(input.trace);
   const executionId = canonicalHash({ type: "execution", snapshot_id: input.snapshot_id, trace_digest: traceDigest });
   const diagnostics: RuntimeObservationSet["diagnostics"] = [];
+  let sourceBindingUnknown = false;
   const observations = spans.map((span): RuntimeObservation => {
     const attributes = normalizeAttributes(span.attributes ?? []);
+    const declaredSnapshot = stringAttribute(attributes, ["scb.snapshot_id"]);
+    if (declaredSnapshot && declaredSnapshot !== input.snapshot_id) throw new RuntimeImportError("RUNTIME_SOURCE_MISMATCH", "Trace declares a different Snapshot");
+    if (!declaredSnapshot) sourceBindingUnknown = true;
     const filePath = stringAttribute(attributes, ["code.file.path", "code.filepath", "code.file.name"]);
     const functionName = stringAttribute(attributes, ["code.function.name", "code.function", "code.namespace"]);
     const definition = matchDefinition(input.definitions, filePath, functionName, span.name ?? "");
@@ -84,11 +88,11 @@ export function importOpenTelemetryJson(input: {
     capability_candidates: capabilityCandidates,
     diagnostics: diagnostics.sort((left, right) => left.file_path.localeCompare(right.file_path) || left.message.localeCompare(right.message)),
     coverage: {
-      status: unmatched > 0 ? "partial" as const : "complete" as const,
+      status: unmatched > 0 || sourceBindingUnknown ? "partial" as const : "complete" as const,
       span_count: observations.length,
       matched_span_count: observations.length - unmatched,
       unmatched_span_count: unmatched,
-      reason_codes: unmatched > 0 ? ["unmatched_runtime_spans"] : [],
+      reason_codes: [...(unmatched > 0 ? ["unmatched_runtime_spans"] : []), ...(sourceBindingUnknown ? ["trace_source_binding_unverified"] : [])],
     },
   };
   return { ...withoutHash, observation_set_hash: canonicalHash(withoutHash) };
@@ -158,10 +162,28 @@ function buildCapabilityCandidates(
   observations: RuntimeObservation[],
   overlay: SemanticOverlay,
 ): CapabilityCandidate[] {
-  const observedSpanIds = new Set(observations.map((item) => item.span_id));
-  const roots = observations.filter((item) => !item.parent_span_id || !observedSpanIds.has(item.parent_span_id));
+  const keyed = new Map(observations.map((item) => [`${item.trace_id}:${item.span_id}`, item]));
+  if (keyed.size !== observations.length) throw new RuntimeImportError("INVALID_OTEL_JSON", "Duplicate span identity within trace");
+  for (const observation of observations) {
+    const seen = new Set<string>();
+    let current: RuntimeObservation | undefined = observation;
+    while (current) {
+      const key = `${current.trace_id}:${current.span_id}`;
+      if (seen.has(key)) throw new RuntimeImportError("INVALID_OTEL_JSON", "Cyclic span parent chain");
+      seen.add(key);
+      current = current.parent_span_id ? keyed.get(`${current.trace_id}:${current.parent_span_id}`) : undefined;
+    }
+  }
+  const roots = observations.filter((item) => !item.parent_span_id || !keyed.has(`${item.trace_id}:${item.parent_span_id}`));
   return roots.map((root): CapabilityCandidate => {
-    const descendants = observations.filter((item) => item.trace_id === root.trace_id);
+    const descendants = observations.filter((item) => {
+      let current: RuntimeObservation | undefined = item;
+      while (current) {
+        if (current.trace_id === root.trace_id && current.span_id === root.span_id) return true;
+        current = current.parent_span_id ? keyed.get(`${current.trace_id}:${current.parent_span_id}`) : undefined;
+      }
+      return false;
+    });
     const definitionKeys = [...new Set(descendants.flatMap((item) => item.definition_key ? [item.definition_key] : []))].sort();
     const staticFlowFactIds = root.definition_key
       ? overlay.facts.filter((fact) =>
