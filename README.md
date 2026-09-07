@@ -175,3 +175,7 @@ node dist/cli/main.js trace run --repo /path/to/repository --store /path/to/stor
 `--codex` 仍为显式外发选项：仅发问题、定义名称与证据摘要；附 Provider Invocation Receipt，限制超时并禁用执行、浏览、插件等工具入口，响应格式错误或服务不可用时保留离线事实。工具禁用依照 [Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)。当前已有一次真实模型输出、格式和零工具活动证据；两条已知启动提示已离线精确分类，但尚未用新的真实调用完整复验 `completed_with_warnings`。模型表述始终标为未验证推断，不升级为权威事实。
 
 54 道题和 6 道对照查询结果位于 `.workspace/acceptance/release-review/`；实现方生成的核对包不等于独立 Gold。2026-09-05 的独立复核和临时通过仅为历史结果。2026-09-06 完整 diff 审查修复了值传播和 Trace 读取问题，当前输出已变化，发布暂不放行；需复核变化的独立判分，详见 [本次审查与交付记录](docs/receipts/final-diff-review-2026-09-06.md)。原 150/75 ms 延迟目标继续作为非阻塞优化项；临时预算仍为 300/150 ms，RSS 196608 KiB。
+
+## 通用源码分组阅读
+
+冻结阅读包可通过同一离线入口生成、读取和重生成结构模块与职责建议，无需仓库专用映射；用法与预算边界见 [通用分组](docs/reader-grouping.md)。

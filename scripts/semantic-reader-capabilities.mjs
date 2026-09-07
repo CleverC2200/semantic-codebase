@@ -15,15 +15,15 @@ export function createReaderCapabilityModel(data, { storage } = {}) {
   }
   const events = readEvents();
   const history = id => events.filter(e => e.id === id);
-  const binding = entry => JSON.stringify({ sources: Object.entries(entry.source_digests ?? {}).sort(([a], [b]) => a.localeCompare(b)), title: entry.title, kind: entry.kind, mainlines: entry.mainlines ?? [], definitions: entry.definitions ?? [], uses: entry.uses ?? [] });
+  const binding = entry => JSON.stringify({ sources: Object.entries(entry.source_digests ?? {}).sort(([a], [b]) => a.localeCompare(b)), title: entry.title, kind: entry.kind, mainlines: entry.mainlines ?? [], definitions: entry.definitions ?? [], uses: entry.uses ?? [], ...(entry.origin === 'automatic' ? { origin:entry.origin, strategy:entry.strategy, overlay_hash:entry.overlay_hash, category:entry.category, suggested_definitions:entry.suggested_definitions ?? [], reasons:entry.reasons ?? [], generation_limits:entry.generation_limits ?? null } : {}) });
   const definitions = new Set(data.definitions.map(d => d.definition_key));
   const lines = new Map((data.mainlines ?? []).filter(m => m.available).map(m => [m.id, m]));
   const entries = new Map();
   for (const raw of data.capabilityCandidates ?? []) {
     if (entries.has(raw.id)) throw new Error('CAPABILITY_DUPLICATE_ID');
     const bindings = Object.entries(raw.source_digests ?? {});
-    const available = bindings.length > 0 && bindings.every(([path, digest]) => data.files.some(f => f.path === path && f.verified && f.source_digest === digest));
-    entries.set(raw.id, { ...raw, available, status: 'candidate', basis: 'llm_inferred', verified: false,
+    const available = bindings.length > 0 && bindings.every(([path, digest]) => data.files.some(f => f.path === path && f.verified && f.source_digest === digest)) && (raw.origin !== 'automatic' || (raw.snapshot === data.snapshot && raw.overlay_hash === data.overlayHash));
+    entries.set(raw.id, { ...raw, available, status: 'candidate', basis: raw.origin === 'automatic' ? raw.basis : 'llm_inferred', verified: false,
       mainlines: (raw.mainlines ?? []).filter(id => lines.has(id)), uses: raw.uses ?? [],
       definitions: (raw.definitions ?? []).filter(key => definitions.has(key)), snapshot: data.snapshot });
   }
@@ -32,7 +32,7 @@ export function createReaderCapabilityModel(data, { storage } = {}) {
     if (!decision) continue;
     entry.decision = decision;
     if (decision.action === 'revoke') continue;
-    if (decision.snapshot !== data.snapshot || decision.binding !== binding(entry) || !entry.available) { entry.status = 'needs_review'; continue; }
+    if (decision.snapshot !== data.snapshot || decision.binding !== binding(entry) || !entry.available || (decision.parent !== null && !entries.has(decision.parent))) { entry.status = 'needs_review'; continue; }
     entry.parent = decision.parent; entry.status = 'confirmed';
   }
   for (const entry of entries.values()) {
@@ -52,7 +52,7 @@ export function createReaderCapabilityModel(data, { storage } = {}) {
   }
   function members(id) {
     const entry = get(id); if (!entry?.available) return [];
-    return [...new Set([...entry.definitions, ...entry.mainlines.flatMap(line => lines.get(line).stages.flatMap(s => s.keys)), ...children(id).flatMap(e => members(e.id))])].sort();
+    return [...new Set([...entry.definitions, ...(entry.suggested_definitions ?? []).filter(key=>definitions.has(key)), ...(entry.origin === 'automatic' ? [] : entry.mainlines.flatMap(line => lines.get(line).stages.flatMap(s => s.keys))), ...children(id).flatMap(e => members(e.id))])].sort();
   }
   function unassigned() {
     const mapped = new Set(children(null).flatMap(e => members(e.id)));
@@ -75,5 +75,5 @@ export function createReaderCapabilityModel(data, { storage } = {}) {
     storage.setItem(storageKey, JSON.stringify({ schema: 1, repository: data.repository, events: [...currentEvents, event] }));
     return event;
   }
-  return { get, children, ancestors, members, unassigned, history, decide, list: () => [...entries.values()] };
+  return { get, children, ancestors, members, unassigned, history, decide, orphanedHistory: () => events.filter(e=>!entries.has(e.id)), list: () => [...entries.values()] };
 }

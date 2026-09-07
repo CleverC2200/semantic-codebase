@@ -14,11 +14,11 @@
   const capabilityStatus = c => ({ candidate: '候选', confirmed: '本机已确认', needs_review: '需复核' }[c.status]);
   const risk = createReaderRiskModel(D, { capabilities: () => capabilities });
   const mainlines = D.mainlines ?? [];
-  const initialFile = D.files.find(f => f.path.endsWith('/parseUtil.ts'))?.path ?? D.files[0]?.path;
+  const initialFile = D.initialFile ?? D.files.find(f => f.path.endsWith('/parseUtil.ts'))?.path ?? D.files[0]?.path;
   let S = { context: 'file', file: initialFile, mode: 'text', reader: null, fn: null, mainline: mainlines[0]?.id, stage: null, detail: null, node: null, edge: null };
   const comparison = { base: null, target: D, pairs: [], result: null, selected: null, error: '', verificationRecords: [] };
   let wrapSource = true, detailNavigation = null, graph = null, graphCacheKey = '', graphSelection = null;
-  const openFiles = new Set([initialFile]), expanded = new Set(['packages/zod/src/v3/helpers']);
+  const openFiles = new Set([initialFile]), expanded = new Set([D.sourceRoot, ...(initialFile ?? '').split('/').slice(0,-1).map((_,i)=>(initialFile ?? '').split('/').slice(0,i+1).join('/'))]);
   const mainlineSelections = new Map();
   const filePreferences = new Map(), bookmarks = new Map(), returnContexts = [];
   let activeBookmark = '', inspectorWidth = 440;
@@ -98,7 +98,7 @@
     announce('正在阅读能力：' + (capabilities.get(id)?.title ?? '待归类'));
   }
   function capabilityMenu() {
-    function branch(parent = null) { return capabilities.children(parent).map(c => `<li><button data-capability="${E(c.id)}" aria-current="${S.context === 'capability' && S.capability === c.id ? 'page' : 'false'}">${E(c.title)}<small>${c.available ? capabilityStatus(c) : '待复核'}</small></button>${capabilities.children(c.id).length ? `<ul>${branch(c.id)}</ul>` : ''}</li>`).join(''); }
+    function branch(parent = null) { return capabilities.children(parent).map(c => `<li><button data-capability="${E(c.id)}" aria-current="${S.context === 'capability' && S.capability === c.id ? 'page' : 'false'}">${E(c.title)}<small>${c.available ? capabilityStatus(c) : '待复核'}</small></button>${capabilities.children(c.id).length ? `<details ${S.capability === c.id || capabilities.ancestors(S.capability).some(a=>a.id===c.id) ? 'open' : ''}><summary>展开子分组 · ${capabilities.children(c.id).length}</summary><ul>${branch(c.id)}</ul></details>` : ''}</li>`).join(''); }
     $('capability-menu').innerHTML = `<ul class="capability-tree">${branch()}</ul><button data-capability="unassigned">待归类 · ${capabilities.unassigned().length}</button>`;
     document.querySelectorAll('[data-navigation]').forEach(b => { if (b.tagName === 'BUTTON') b.setAttribute('aria-pressed', String(b.dataset.navigation === document.querySelector('.sidebar').dataset.navigation)); });
   }
@@ -106,10 +106,25 @@
     const last = capabilities.history(c.id).at(-1);
     return `<details class="details"><summary>确认或调整阅读归属</summary><p class="muted">只保存到当前浏览器；不改写 Snapshot，也不替代运行能力注册表。换版本后需复核。</p>${capabilityStorageError ? `<p role="alert">${E(capabilityStorageError)}</p>` : `<form id="capability-decision"><label>上级能力<select name="parent"><option value="">顶层</option>${capabilities.list().filter(p => p.id !== c.id && !capabilities.ancestors(p.id).some(a => a.id === c.id)).map(p => `<option value="${E(p.id)}" ${p.id === c.parent ? 'selected' : ''}>${E(p.title)}</option>`).join('')}</select></label><label>确认人<input name="actor" required maxlength="100" value="${E(last?.actor ?? '')}"></label><label>理由<input name="reason" required maxlength="500"></label><button name="action" value="confirm">确认归属</button>${last ? '<button name="action" value="revoke">撤销确认</button>' : ''}<p id="decision-error" role="alert"></p></form>`}<details><summary>决定记录 · ${capabilities.history(c.id).length}</summary>${capabilities.history(c.id).map(e => `<p>v${e.version} · ${E(e.actor)} · ${e.action === 'revoke' ? '撤销' : '确认'}<br>${E(e.reason)}<br>Snapshot：${E(e.snapshot)}</p>`).join('')}</details></details>`;
   }
+  function capabilityImplementations(keys) {
+    const groups = new Map();
+    for (const key of keys) { const d = defs.get(key); if (!d) continue; if (!groups.has(d.file_path)) groups.set(d.file_path, []); groups.get(d.file_path).push(d); }
+    return `<div class="capability-implementations">${[...groups].sort(([a],[b])=>a.localeCompare(b)).map(([path, entries]) => `<details class="details"><summary>${E(path)} · ${entries.length} 个定义</summary><button data-file="${E(path)}">阅读文件</button><ul>${entries.sort((a,b)=>(a.line??0)-(b.line??0)).map(d=>`<li>${fnLink(d.definition_key)} <span class="muted">L${d.line ?? '?'} · ${E(d.kind ?? d.definition_kind ?? '定义')}</span></li>`).join('')}</ul></details>`).join('')}</div>`;
+  }
   function capabilityView() {
     const c = capabilities.get(S.capability), keys = c ? capabilities.members(c.id) : capabilities.unassigned();
-    if (!c) return `<h1>待归类</h1><p>尚未映射到业务能力的定义仍可按源码阅读。</p><div class="links">${keys.map(k => `<button data-file="${E(defs.get(k)?.file_path)}">${E(label(k))}</button>`).join('')}</div>`;
-    return `<nav class="object-breadcrumb" aria-label="业务层级">${capabilities.ancestors(c.id).map(p => `<button data-capability="${E(p.id)}">${E(p.title)}</button><span>›</span>`).join('')}${E(c.title)}</nav><h1>${E(c.title)}</h1><p class="lede">${E(c.description)}</p><p class="muted">${c.available ? capabilityStatus(c) + ' · 候选说明仍为 llm_inferred、未验证；确认仅针对阅读归属' : '来源版本失配，归属待复核；不展示过期映射。'}</p><section class="capability-list">${capabilities.children(c.id).map(child => `<article><button data-capability="${E(child.id)}">${E(child.title)}</button><p>${E(child.description)}</p></article>`).join('')}</section>${c.available && c.mainlines.length ? `<h2>可以完成哪些事</h2><section class="capability-list">${c.mainlines.map(id => { const m = mainlines.find(l => l.id === id); return `<article><button data-mainline="${E(id)}">${E(m.title)}</button><p>${E(m.purpose)}</p></article>`; }).join('')}</section>` : ''}${c.uses.length ? `<h3>协作能力 · 候选</h3><div class="links">${c.uses.map(id => `<button data-capability="${E(id)}">${E(capabilities.get(id).title)}</button>`).join('')}</div>` : ''}<details class="details"><summary>关联实现 · ${keys.length}</summary><div class="links">${keys.map(fnLink).join('')}</div></details>${capabilityDecisionForm(c)}<details class="explanation-origin"><summary>版本与来源</summary><p>Snapshot：${E(c.snapshot)}</p>${Object.entries(c.source_digests).map(([p,h]) => `<p>${E(p)}<br>${E(h)}</p>`).join('')}</details>`;
+    if (!c) return `<h1>待归类</h1>${groupingSummary()}<p>${keys.length ? `${keys.length} 个定义尚未关联业务或支撑模块，按文件展开核对。` : '当前分析范围内的定义均已有模块归属候选。具体业务含义和归属仍待核验。'}</p>${D.grouping?.unassigned?.length ? `<details class="details"><summary>未归类原因</summary>${D.grouping.unassigned.map(item=>`<p>${fnLink(item.definition_key)} · ${E(item.reason)}</p>`).join('')}</details>` : ''}${capabilityImplementations(keys)}`;
+    return `<nav class="object-breadcrumb" aria-label="业务层级">${capabilities.ancestors(c.id).map(p => `<button data-capability="${E(p.id)}">${E(p.title)}</button><span>›</span>`).join('')}${E(c.title)}</nav><h1>${E(c.title)}</h1><p class="lede">${E(c.description)}</p><p class="muted">${c.available ? capabilityStatus(c) + ' · 确认仅针对阅读归属' : '来源版本失配，归属待复核；不展示过期映射。'}</p>${groupingReasons(c)}<section class="capability-list">${capabilities.children(c.id).map(child => `<article><button data-capability="${E(child.id)}">${E(child.title)}</button><p>${E(child.description)}</p></article>`).join('')}</section>${c.available && c.mainlines.length ? `<h2>可以完成哪些事</h2><section class="capability-list">${c.mainlines.map(id => { const m = mainlines.find(l => l.id === id); return `<article><button data-mainline="${E(id)}">${E(m.title)}</button><p>${E(m.purpose)}</p></article>`; }).join('')}</section>` : ''}${c.uses.length ? `<h3>协作能力 · 候选</h3><div class="links">${c.uses.map(id => `<button data-capability="${E(id)}">${E(capabilities.get(id).title)}</button>`).join('')}</div>` : ''}<details class="details"><summary>关联实现 · ${keys.length}</summary>${capabilityImplementations(keys)}</details>${capabilityDecisionForm(c)}<details class="explanation-origin"><summary>版本与来源</summary><p>Snapshot：${E(c.snapshot)}</p>${Object.entries(c.source_digests).map(([p,h]) => `<p>${E(p)}<br>${E(h)}</p>`).join('')}</details>`;
+  }
+  function groupingSummary() {
+    const g = D.grouping; if (!g) return '';
+    return `<section aria-label="自动分组范围"><p>模块归属 ${g.coverage.structural.mapped} / ${g.coverage.structural.total} · ${E(g.coverage.structural.status)}；业务解释：${E(g.coverage.business.status)}</p><p class="muted">自动分组仅是阅读候选；模块覆盖不代表语义理解。策略 ${E(g.strategy)}，复用冻结分析。</p><details class="details"><summary>预算与未覆盖范围 · ${E(g.status)}</summary><p>定义上限 ${g.limits.maxDefinitions}，关联上限 ${g.limits.maxLinks}，建议上限 ${g.limits.maxProposals}。</p><p>未处理关联 ${g.truncated_links}；未展示建议 ${g.truncated_proposals}；未知关联 ${g.unknown_links.length}；人工配置 ${g.manual_mapping_count} 项（不计自动覆盖）。完整明细保存在 reader-data.json。</p>${Object.entries(g.unknown_links.reduce((counts,l)=>(counts[l.reason]=(counts[l.reason]??0)+1,counts),{})).map(([r,n])=>`<p>${E(r)} · ${n}</p>`).join('')}</details><details class="details"><summary>已移除候选的决定历史 · ${capabilities.orphanedHistory().length}</summary>${capabilities.orphanedHistory().map(e=>`<p>${E(e.id)} · v${e.version} · ${E(e.actor)} · ${E(e.action)}<br>${E(e.reason)}<br>Snapshot ${E(e.snapshot)}</p>`).join('')}</details></section>`;
+  }
+  function groupingReasons(c) {
+    if (c.origin !== 'automatic') return '<p class="muted">人工配置的阅读映射 · llm_inferred · 未验证；不计入自动生成验收。</p>';
+    const incoming = (D.grouping?.links ?? []).filter(l=>l.to===c.id && l.from!==c.id);
+    const names = { structural_module: '结构模块', structural_root: '结构组织', structural_directory: '目录组织', business_candidate: '业务归属建议', support_candidate: '支撑实现建议', proposal_root: '职责建议' };
+    return `${groupingSummary()}${incoming.length ? `<details class="details"><summary>使用此实现 · ${incoming.length} 条关联</summary><p>最多展示 50 条；完整关联见 reader-data.json。</p>${incoming.slice(0,50).map(l=>`<p><button data-capability="${E(l.from)}">${E(capabilities.get(l.from)?.title ?? l.from)}</button> · ${E(l.kind)} · ${E(l.basis)}</p><div class="links">${l.evidence_ids.slice(0,20).map(eid=>`<button data-group-evidence="${E(eid)}">${E(D.evidence[eid]?.file_path)} · L${E(D.evidence[eid]?.line ?? '?')}</button>`).join('')}</div>`).join('')}</details>` : ''}<p>${E(names[c.category] ?? '候选')} · ${E(c.basis)} · 自动依据未验证，归属状态见上方</p>${c.reasons?.length ? `<details class="details"><summary>分组依据 · ${c.reasons.length}</summary><p class="muted">最多展示 50 条依据，每条 20 处证据；完整引用见 reader-data.json。</p>${c.reasons.slice(0,50).map(r=>`<p>${E(r.description)} <small>${E(r.rule)}</small></p><div class="links">${r.evidence_ids.slice(0,20).map(eid=>`<button data-group-evidence="${E(eid)}">${E(D.evidence[eid]?.file_path)} · L${E(D.evidence[eid]?.line ?? '?')}</button>`).join('')}</div>`).join('')}</details>` : ''}`;
   }
   function enterMainline(id, fromReference = false) {
     if (!mainlines.find(m => m.id === id)?.available) return;
@@ -339,7 +354,14 @@
     detailNavigation = null;
     if (!S.detail) { panel.innerHTML = ''; return; }
     let title = '', body = '';
-    if (S.detail === 'fn') {
+    if (S.detail === 'group-evidence') {
+      const e = D.evidence[S.groupEvidence], file = D.files.find(f=>f.path===e?.file_path);
+      if (!e || !file?.verified || file.source_digest !== e.source_digest) { panel.innerHTML = '<p>来源版本无法核对。</p>'; return; }
+      const bytes = new TextEncoder().encode(file.source), decode = end => new TextDecoder().decode(bytes.slice(0,end)).split('\n').length;
+      const line = decode(e.span.start_byte), endLine = decode(e.span.end_byte);
+      title = '分组依据';
+      body = `<h2>分组依据</h2><p>${E(e.file_path)} · L${line}–${endLine}</p><p class="muted">源码依据不等于业务解释已验证。</p>${sourceHtml(file, {line,endLine})}<button data-file="${E(e.file_path)}">阅读文件</button>`;
+    } else if (S.detail === 'fn') {
       const d = defs.get(S.fn); if (!d) { panel.hidden = true; return; }
       title = d.qualified_name;
       const sum = summary(d), file = D.files.find(f => f.path === d.file_path);
@@ -574,6 +596,7 @@
     else if (el.dataset.navigation) { document.querySelector('.sidebar').dataset.navigation = el.dataset.navigation; capabilityMenu(); }
     else if (el.dataset.capability) enterCapability(el.dataset.capability, Boolean(el.closest('#center')));
     else if (el.hasAttribute('data-global-pick')) pickGlobal(Number(el.dataset.globalPick));
+    else if (el.dataset.groupEvidence) { S.groupEvidence = el.dataset.groupEvidence; S.detail = 'group-evidence'; render(false); focusInspector(); }
     else if (el.dataset.file) { event.preventDefault(); enterFile(el.dataset.file); }
     else if (el.dataset.treeFn) readFunction(el.dataset.treeFn);
     else if (el.dataset.fn) el.closest('#inspector') ? selectFunction(el.dataset.fn) : readFunction(el.dataset.fn);

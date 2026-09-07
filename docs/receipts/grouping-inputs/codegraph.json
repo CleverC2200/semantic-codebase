@@ -1,0 +1,6 @@
+[
+  "src/extraction/kernel/decode.ts",
+  "src/extraction/kernel/index.ts",
+  "src/extraction/kernel/layout.ts",
+  "src/extraction/kernel/loader.ts"
+]
