@@ -1,0 +1,34 @@
+{
+  "schema": "reader-snapshot-v1",
+  "repository": "reader-controlled-fixture",
+  "snapshot": "before",
+  "overlayHash": "fixture",
+  "coverage": {
+    "status": "partial"
+  },
+  "files": [
+    {
+      "path": "example.ts",
+      "source": "export function run(value: number) { return value; }",
+      "verified": true,
+      "source_digest": "454ba7f9953d328a509bd0b6bbd31af3e45bb21ab0c7ee8cc6cbf6a64e889fd2"
+    }
+  ],
+  "definitions": [
+    {
+      "definition_key": "before-run",
+      "qualified_name": "run",
+      "kind": "function",
+      "file_path": "example.ts",
+      "definition_span": {
+        "start_byte": 0,
+        "end_byte": 52
+      },
+      "line": 1,
+      "endLine": 1
+    }
+  ],
+  "facts": [],
+  "evidence": {},
+  "relations": []
+}

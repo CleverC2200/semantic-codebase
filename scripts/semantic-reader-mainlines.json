@@ -1,0 +1,617 @@
+[
+  {
+    "id": "issue-collection",
+    "title": "错误生成与收集",
+    "purpose": "把校验问题整理成带路径和消息的错误，追加到解析上下文。",
+    "input": "ParseContext 和 IssueData",
+    "output": "ctx.common.issues 新增一条 ZodIssue；函数返回 void。",
+    "boundary": "从 addIssueToContext 开始，覆盖本地错误生成片段；不包含调用它的所有校验器。错误映射回调的具体实现可能未解析。",
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645",
+      "packages/zod/src/v3/errors.ts": "cb8debd524102d5a38dbaadd72b220f68349dbac51ac9663569c1807f64b3772"
+    },
+    "stages": [
+      {
+        "id": "read-map",
+        "title": "读取错误映射",
+        "description": "从 errors.ts 读取当前全局错误映射，作为候选映射之一。",
+        "anchors": [
+          {
+            "function": "addIssueToContext",
+            "match": "const overrideMap = getErrorMap();",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          },
+          {
+            "function": "getErrorMap",
+            "match": "return overrideErrorMap;",
+            "file": "packages/zod/src/v3/errors.ts"
+          }
+        ],
+        "column": 0,
+        "row": 0,
+        "kind": "stage"
+      },
+      {
+        "id": "prepare",
+        "title": "组装问题与路径",
+        "description": "向 makeIssue 传入数据、当前路径、问题描述及按优先级排列的映射列表。",
+        "anchors": [
+          {
+            "function": "addIssueToContext",
+            "match": "const issue = makeIssue({",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          },
+          {
+            "function": "makeIssue",
+            "match": "const fullPath = [...path, ...(issueData.path || [])];",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 0,
+        "kind": "stage"
+      },
+      {
+        "id": "message",
+        "title": "已有自定义消息？",
+        "description": "makeIssue 检查 issueData.message；已提供时直接使用，否则调用映射生成消息。",
+        "anchors": [
+          {
+            "function": "makeIssue",
+            "match": "if (issueData.message !== undefined) {",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 2,
+        "row": 0,
+        "kind": "condition"
+      },
+      {
+        "id": "provided",
+        "title": "保留自定义消息",
+        "description": "保留调用方提供的消息，同时带上完整路径。",
+        "anchors": [
+          {
+            "function": "makeIssue",
+            "match": "message: issueData.message,",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 1,
+        "kind": "stage"
+      },
+      {
+        "id": "mapped",
+        "title": "计算映射消息",
+        "description": "反转有效映射列表，逐个计算消息；后执行的映射可以使用前一个 defaultError。",
+        "anchors": [
+          {
+            "function": "makeIssue",
+            "match": "for (const map of maps) {\n    errorMessage = map(fullIssue, { data, defaultError: errorMessage }).message;\n  }",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 2,
+        "row": 1,
+        "kind": "stage"
+      },
+      {
+        "id": "collect",
+        "title": "收集问题",
+        "description": "makeIssue 返回后，将问题追加到当前上下文。push 的调用目标未解析，追加语句可直接核对。",
+        "anchors": [
+          {
+            "function": "addIssueToContext",
+            "match": "ctx.common.issues.push(issue);",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 0,
+        "row": 1,
+        "kind": "stage",
+        "outcome": "success",
+        "boundary": "state"
+      }
+    ],
+    "edges": [
+      {
+        "id": "read-map>prepare",
+        "from": "read-map",
+        "to": "prepare",
+        "label": "继续"
+      },
+      {
+        "id": "prepare>message",
+        "from": "prepare",
+        "to": "message",
+        "label": "进入 makeIssue"
+      },
+      {
+        "id": "message>provided",
+        "from": "message",
+        "to": "provided",
+        "label": "已提供消息"
+      },
+      {
+        "id": "message>mapped",
+        "from": "message",
+        "to": "mapped",
+        "label": "未提供消息"
+      },
+      {
+        "id": "provided>collect",
+        "from": "provided",
+        "to": "collect",
+        "label": "返回 issue"
+      },
+      {
+        "id": "mapped>collect",
+        "from": "mapped",
+        "to": "collect",
+        "label": "返回 issue"
+      }
+    ]
+  },
+  {
+    "id": "array-merge",
+    "title": "数组结果合并",
+    "purpose": "把每个数组元素的校验结果合成一个整体结果。",
+    "input": "ParseStatus 和各元素的同步校验结果",
+    "output": "INVALID，或包含整体状态和结果数组的对象。",
+    "boundary": "仅覆盖 ParseStatus.mergeArray 及状态标记；不代表数组元素自身的校验过程。",
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645"
+    },
+    "stages": [
+      {
+        "id": "prepare",
+        "title": "准备结果容器",
+        "description": "进入函数时创建空结果容器；后续循环逐项填充。",
+        "anchors": [
+          {
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+            "function": "ParseStatus.mergeArray",
+            "match": "const arrayValue: any[] = [];"
+          }
+        ],
+        "column": 0,
+        "row": 0,
+        "kind": "stage"
+      },
+      {
+        "id": "iterate",
+        "title": "遍历元素结果",
+        "description": "逐项读取已经解析完成的结果；没有剩余项时结束遍历。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeArray",
+            "match": "for (const s of results) {",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 0,
+        "kind": "stage"
+      },
+      {
+        "id": "aborted",
+        "title": "元素已中止？",
+        "description": "任何元素为 aborted 时立即返回 INVALID。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeArray",
+            "match": "if (s.status === \"aborted\") return INVALID;",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 2,
+        "row": 0,
+        "kind": "condition"
+      },
+      {
+        "id": "stop",
+        "title": "整体中止",
+        "description": "提前结束合并，不返回已收集的部分结果。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeArray",
+            "match": "return INVALID;",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 2,
+        "row": 1,
+        "kind": "stage",
+        "outcome": "failure"
+      },
+      {
+        "id": "dirty",
+        "title": "标记整体状态",
+        "description": "若当前元素为 dirty，调用 status.dirty()；它只把 valid 改为 dirty。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeArray",
+            "match": "if (s.status === \"dirty\") status.dirty();",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          },
+          {
+            "function": "ParseStatus.dirty",
+            "match": "if (this.value === \"valid\") this.value = \"dirty\";",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 1,
+        "kind": "stage",
+        "boundary": "state"
+      },
+      {
+        "id": "append",
+        "title": "保留元素值",
+        "description": "将当前元素的 value 追加到数组。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeArray",
+            "match": "arrayValue.push(s.value);",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 2,
+        "kind": "stage"
+      },
+      {
+        "id": "finish",
+        "title": "返回合并结果",
+        "description": "所有元素处理完毕后，返回整体状态和数组。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeArray",
+            "match": "return { status: status.value, value: arrayValue };",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 0,
+        "row": 2,
+        "kind": "stage",
+        "outcome": "success"
+      }
+    ],
+    "edges": [
+      {
+        "id": "prepare>iterate",
+        "from": "prepare",
+        "to": "iterate",
+        "label": "开始遍历"
+      },
+      {
+        "id": "iterate>aborted",
+        "from": "iterate",
+        "to": "aborted",
+        "label": "有元素"
+      },
+      {
+        "id": "aborted>stop",
+        "from": "aborted",
+        "to": "stop",
+        "label": "aborted"
+      },
+      {
+        "id": "aborted>dirty",
+        "from": "aborted",
+        "to": "dirty",
+        "label": "未中止"
+      },
+      {
+        "id": "dirty>append",
+        "from": "dirty",
+        "to": "append",
+        "label": "继续"
+      },
+      {
+        "id": "append>iterate",
+        "from": "append",
+        "to": "iterate",
+        "label": "下一元素"
+      },
+      {
+        "id": "iterate>finish",
+        "from": "iterate",
+        "to": "finish",
+        "label": "遍历结束，包括空数组"
+      }
+    ]
+  },
+  {
+    "id": "object-merge",
+    "title": "对象结果合并",
+    "purpose": "汇总对象属性的校验状态，并组装输出对象。",
+    "input": "ParseStatus 和已经解析的键值对",
+    "output": "INVALID，或包含整体状态和结果对象的结构。",
+    "boundary": "仅覆盖同步结果合并；键和值如何校验、异步等待如何完成不在这张阶段图中。",
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645"
+    },
+    "stages": [
+      {
+        "id": "prepare",
+        "title": "准备结果容器",
+        "description": "进入函数时创建空结果容器；后续循环逐项填充。",
+        "anchors": [
+          {
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+            "function": "ParseStatus.mergeObjectSync",
+            "match": "const finalObject: any = {};"
+          }
+        ],
+        "column": 0,
+        "row": 0,
+        "kind": "stage"
+      },
+      {
+        "id": "iterate",
+        "title": "遍历键值对",
+        "description": "逐项读取已经解析完成的结果；没有剩余项时结束遍历。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeObjectSync",
+            "match": "for (const pair of pairs) {",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 0,
+        "kind": "stage"
+      },
+      {
+        "id": "aborted",
+        "title": "键或值已中止？",
+        "description": "任何一方状态为 aborted，立即返回 INVALID。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeObjectSync",
+            "match": "if (key.status === \"aborted\") return INVALID;\n      if (value.status === \"aborted\") return INVALID;",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 2,
+        "row": 0,
+        "kind": "condition"
+      },
+      {
+        "id": "stop",
+        "title": "整体中止",
+        "description": "提前返回 INVALID，不返回部分结果。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeObjectSync",
+            "match": "return INVALID;",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 2,
+        "row": 1,
+        "kind": "stage",
+        "outcome": "failure"
+      },
+      {
+        "id": "dirty",
+        "title": "汇总 dirty 状态",
+        "description": "键或值为 dirty 时调用状态标记方法。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeObjectSync",
+            "match": "if (key.status === \"dirty\") status.dirty();\n      if (value.status === \"dirty\") status.dirty();",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          },
+          {
+            "function": "ParseStatus.dirty",
+            "match": "if (this.value === \"valid\") this.value = \"dirty\";",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 1,
+        "kind": "stage",
+        "boundary": "state"
+      },
+      {
+        "id": "write",
+        "title": "按条件写入属性",
+        "description": "跳过 __proto__；值非 undefined 或 alwaysSet 为真时写入。其余情况保持对象不变。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeObjectSync",
+            "match": "if (key.value !== \"__proto__\" && (typeof value.value !== \"undefined\" || pair.alwaysSet)) {\n        finalObject[key.value] = value.value;\n      }",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 1,
+        "row": 2,
+        "kind": "stage",
+        "boundary": "state"
+      },
+      {
+        "id": "finish",
+        "title": "返回合并结果",
+        "description": "遍历结束后返回整体状态和对象。",
+        "anchors": [
+          {
+            "function": "ParseStatus.mergeObjectSync",
+            "match": "return { status: status.value, value: finalObject };",
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts"
+          }
+        ],
+        "column": 0,
+        "row": 2,
+        "kind": "stage",
+        "outcome": "success"
+      }
+    ],
+    "edges": [
+      {
+        "id": "prepare>iterate",
+        "from": "prepare",
+        "to": "iterate",
+        "label": "开始遍历"
+      },
+      {
+        "id": "iterate>aborted",
+        "from": "iterate",
+        "to": "aborted",
+        "label": "有键值对"
+      },
+      {
+        "id": "aborted>stop",
+        "from": "aborted",
+        "to": "stop",
+        "label": "任一 aborted"
+      },
+      {
+        "id": "aborted>dirty",
+        "from": "aborted",
+        "to": "dirty",
+        "label": "均未中止"
+      },
+      {
+        "id": "dirty>write",
+        "from": "dirty",
+        "to": "write",
+        "label": "继续"
+      },
+      {
+        "id": "write>iterate",
+        "from": "write",
+        "to": "iterate",
+        "label": "下一键值对"
+      },
+      {
+        "id": "iterate>finish",
+        "from": "iterate",
+        "to": "finish",
+        "label": "遍历结束，包括空对象"
+      }
+    ]
+  },
+  {
+    "id": "async-object-merge",
+    "title": "异步对象结果合并",
+    "purpose": "等待对象键值对的异步结果，然后复用同步合并。",
+    "input": "ParseStatus 和含异步键值结果的 pairs",
+    "output": "Promise<SyncParseReturnType<any>>；等待可能拒绝，合并也可能返回 INVALID。",
+    "boundary": "源码支持的局部候选；不包含外层异常处理，不证明补偿、重试或真实运行。",
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645"
+    },
+    "stages": [
+      {
+        "id": "prepare",
+        "title": "准备同步结果",
+        "description": "为各键值对的等待结果准备容器。",
+        "anchors": [
+          {
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+            "function": "ParseStatus.mergeObjectAsync",
+            "match": "const syncPairs: ObjectPair[] = [];"
+          }
+        ],
+        "kind": "stage"
+      },
+      {
+        "id": "await",
+        "title": "逐对等待键和值",
+        "description": "按循环顺序等待 pair.key 与 pair.value，不表示并发等待所有属性。",
+        "boundary": "async",
+        "anchors": [
+          {
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+            "function": "ParseStatus.mergeObjectAsync",
+            "match": "const key = await pair.key;\n      const value = await pair.value;"
+          }
+        ],
+        "kind": "stage"
+      },
+      {
+        "id": "append",
+        "title": "累积同步结果",
+        "description": "把已等待完成的键值放入 syncPairs。",
+        "boundary": "state",
+        "anchors": [
+          {
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+            "function": "ParseStatus.mergeObjectAsync",
+            "match": "syncPairs.push({\n        key,\n        value,\n      });"
+          }
+        ],
+        "kind": "stage"
+      },
+      {
+        "id": "merge",
+        "title": "交给同步合并",
+        "description": "所有键值对等待后调用 mergeObjectSync；同步合并仍可能返回 INVALID。",
+        "anchors": [
+          {
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+            "function": "ParseStatus.mergeObjectAsync",
+            "match": "return ParseStatus.mergeObjectSync(status, syncPairs);"
+          }
+        ],
+        "outcome": "success",
+        "kind": "stage"
+      },
+      {
+        "id": "reject",
+        "title": "等待拒绝时退出",
+        "description": "await 可能拒绝；本函数没有显式捕获，外层恢复策略未知。此路径为未验证说明。",
+        "outcome": "failure",
+        "anchors": [
+          {
+            "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+            "function": "ParseStatus.mergeObjectAsync",
+            "match": "const key = await pair.key;\n      const value = await pair.value;"
+          }
+        ],
+        "kind": "stage"
+      }
+    ],
+    "edges": [
+      {
+        "from": "prepare",
+        "to": "await",
+        "label": "存在键值对",
+        "id": "async:0"
+      },
+      {
+        "from": "prepare",
+        "to": "merge",
+        "label": "空集合",
+        "id": "async:1"
+      },
+      {
+        "from": "await",
+        "to": "append",
+        "label": "等待兑现",
+        "id": "async:2"
+      },
+      {
+        "from": "append",
+        "to": "await",
+        "label": "下一对",
+        "id": "async:3"
+      },
+      {
+        "from": "append",
+        "to": "merge",
+        "label": "遍历结束",
+        "id": "async:4"
+      },
+      {
+        "from": "await",
+        "to": "reject",
+        "label": "等待拒绝（可能）",
+        "id": "async:5"
+      }
+    ]
+  }
+]

@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "basis": "llm_inferred",
+  "verified": false,
+  "files": {
+    "packages/zod/src/v3/helpers/parseUtil.ts": {
+      "source_digest": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645",
+      "purpose": "统一解析过程中的上下文、错误收集和结果状态。",
+      "role": "它处在具体 Schema 校验器和最终结果之间：校验器借助这些工具传递解析上下文、收集错误，并把子项结果合并为 valid、dirty 或 aborted。",
+      "boundary": "主要包含错误构造、状态合并、结果包装和状态判别四组函数。它不负责定义某种具体类型的校验规则。",
+      "functions": {
+        "makeIssue": {
+          "purpose": "把原始错误描述整理成带完整路径和最终消息的 ZodIssue。",
+          "inputs": [
+            {
+              "name": "params",
+              "description": "包含 data、path、errorMaps 和 issueData：分别为被校验数据、当前位置、消息映射函数和原始问题描述。"
+            }
+          ],
+          "output": "返回 ZodIssue，包含问题代码、完整路径和消息。",
+          "logic": "先合并路径；若 issueData.message 已给定则直接使用；否则按处理后的映射列表逐层计算消息。",
+          "example": "传入自定义 message 时，返回的问题会保留该消息。"
+        },
+        "addIssueToContext": {
+          "purpose": "生成一条错误并追加到当前解析上下文，让上层统一收集失败原因。",
+          "inputs": [
+            {
+              "name": "ctx",
+              "description": "当前解析上下文，包含数据、路径、错误映射和共用的 issues 集合。"
+            },
+            {
+              "name": "issueData",
+              "description": "要记录的问题描述，例如错误代码和补充信息。"
+            }
+          ],
+          "output": "无返回值（void）；结果体现为 ctx.common.issues 新增一条问题。",
+          "logic": "读取全局错误映射，组合各级映射后调用 makeIssue，最后把问题放入共享错误数组。",
+          "example": "调用后可以从 ctx.common.issues 读取新增错误。",
+          "steps": [
+            {
+              "match": "ctx.common.issues.push(issue);",
+              "title": "将 issue 追加到上下文",
+              "description": "更新 ctx.common.issues，供上层统一读取。"
+            },
+            {
+              "match": "const issue = makeIssue({\n    issueData: issueData,\n    data: ctx.data,\n    path: ctx.path,\n    errorMaps: [\n      ctx.common.contextualErrorMap, // contextual error map is first priority\n      ctx.schemaErrorMap, // then schema-bound map if available\n      overrideMap, // then global override map\n      overrideMap === defaultErrorMap ? undefined : defaultErrorMap, // then global default map\n    ].filter((x) => !!x),\n  });",
+              "title": "组合错误映射并生成 issue",
+              "description": "把输入、路径和有效的映射规则交给 makeIssue。"
+            },
+            {
+              "match": "const overrideMap = getErrorMap();",
+              "title": "读取全局错误映射",
+              "description": "调用 getErrorMap，获得全局映射。"
+            }
+          ]
+        },
+        "ParseStatus.dirty": {
+          "purpose": "把仍然有效的解析状态标成“有问题但可保留结果”。",
+          "inputs": [],
+          "output": "无返回值；可能修改当前实例的 value。",
+          "logic": "仅将 valid 改成 dirty；已经 aborted 的状态不会被降回 dirty。",
+          "example": "valid → dirty；aborted → aborted。"
+        },
+        "ParseStatus.abort": {
+          "purpose": "将当前解析状态标为中止。",
+          "inputs": [],
+          "output": "无返回值；当前实例的 value 变为 aborted。",
+          "logic": "如果尚未中止则更新状态，重复调用保持中止。",
+          "example": "dirty → aborted。"
+        },
+        "ParseStatus.mergeArray": {
+          "purpose": "把多个数组成员的解析结果合并为一个数组结果。",
+          "inputs": [
+            {
+              "name": "status",
+              "description": "当前可变 ParseStatus，用来汇总子项是否有问题。"
+            },
+            {
+              "name": "results",
+              "description": "各数组成员的同步解析结果。"
+            }
+          ],
+          "output": "返回合并后的同步结果；若任一成员 aborted，直接返回 INVALID。",
+          "logic": "依次检查成员状态，传播 dirty，收集每个成员的 value；最终返回状态和数组。",
+          "example": "成员全部 valid 时，得到带合并数组的 valid 结果。"
+        },
+        "ParseStatus.mergeObjectAsync": {
+          "purpose": "等待对象键值对的异步解析，再复用同步合并逻辑。",
+          "inputs": [
+            {
+              "name": "status",
+              "description": "用于累计状态的 ParseStatus。"
+            },
+            {
+              "name": "pairs",
+              "description": "待解析的键值对；key、value 均可为同步结果或 Promise。"
+            }
+          ],
+          "output": "返回 Promise，兑现为同步对象解析结果。",
+          "logic": "逐对 await key 和 value，组成同步 pairs，再交给 mergeObjectSync。",
+          "example": "调用方需要 await 才能拿到最终对象结果。"
+        },
+        "ParseStatus.mergeObjectSync": {
+          "purpose": "汇总对象属性的解析结果，并构建最终对象。",
+          "inputs": [
+            {
+              "name": "status",
+              "description": "用于传播 dirty 状态的 ParseStatus。"
+            },
+            {
+              "name": "pairs",
+              "description": "键和值的同步解析结果，支持 alwaysSet 标记。"
+            }
+          ],
+          "output": "返回带对象的同步结果，或在键/值中止时返回 INVALID。",
+          "logic": "遇到 aborted 立即返回；传播 dirty；跳过 __proto__ 键；按值是否 undefined 及 alwaysSet 决定是否写入属性。",
+          "example": "value 为 undefined 且未设置 alwaysSet 时，不写入该属性。"
+        },
+        "DIRTY": {
+          "purpose": "把一个值包装成“有校验问题但仍保留值”的解析结果。",
+          "inputs": [
+            {
+              "name": "value",
+              "description": "要保留的任意类型 T 的值；本函数不会校验或转换它。"
+            }
+          ],
+          "output": "返回 { status: \"dirty\", value }，保留原输入值。",
+          "logic": "只创建结果对象；不会自行记录具体错误。",
+          "example": "DIRTY(42) → { status: \"dirty\", value: 42 }"
+        },
+        "OK": {
+          "purpose": "把一个值包装成校验成功的解析结果。",
+          "inputs": [
+            {
+              "name": "value",
+              "description": "已由调用方处理的类型 T 的值；本函数本身不负责校验。"
+            }
+          ],
+          "output": "返回 { status: \"valid\", value }，保留原输入值。",
+          "logic": "构造成功结果对象，让调用方统一消费解析状态和数据。",
+          "example": "OK(42) → { status: \"valid\", value: 42 }"
+        },
+        "isAborted": {
+          "purpose": "判断一个解析结果是否已经中止。",
+          "inputs": [
+            {
+              "name": "x",
+              "description": "待检查的 ParseReturnType<any>；函数直接读取 status，不会等待 Promise。"
+            }
+          ],
+          "output": "返回 boolean：status 为 aborted 时为 true，同时声明 x is INVALID 类型谓词。",
+          "logic": "只比较状态字段，不改变输入，也不执行校验。",
+          "example": "isAborted({ status: \"aborted\" }) → true"
+        },
+        "isDirty": {
+          "purpose": "判断一个解析结果是否为 dirty，即存在校验问题但仍保留结果值。",
+          "inputs": [
+            {
+              "name": "x",
+              "description": "待检查的 ParseReturnType<T>；直接读取 status，不会等待异步结果。"
+            }
+          ],
+          "output": "返回 boolean：仅当 status === \"dirty\" 时为 true。",
+          "logic": "源码的类型谓词写成 x is OK<T> | DIRTY<T>，比实际 true 分支更宽；运行行为仍只检查 dirty。",
+          "example": "isDirty({ status: \"dirty\", value: 42 }) → true；isDirty({ status: \"valid\", value: 42 }) → false"
+        },
+        "isValid": {
+          "purpose": "判断一个解析结果是否为有效的成功结果。",
+          "inputs": [
+            {
+              "name": "x",
+              "description": "待检查的 ParseReturnType<T>；若是 Promise，本函数不会等待它。"
+            }
+          ],
+          "output": "返回 boolean：status 为 valid 时为 true，并声明 x is OK<T>。",
+          "logic": "比较状态字段，供调用方决定是否读取成功结果。",
+          "example": "isValid(OK(42)) → true"
+        },
+        "isAsync": {
+          "purpose": "判断传入的解析结果是否为当前环境中的 Promise 实例。",
+          "inputs": [
+            {
+              "name": "x",
+              "description": "可能是同步解析结果，也可能是 Promise。"
+            }
+          ],
+          "output": "返回 boolean；true 时声明 x is AsyncParseReturnType<T>。",
+          "logic": "先检查 Promise 是否存在，再用 instanceof Promise；并非通用 thenable 检测。",
+          "example": "isAsync(Promise.resolve(OK(42))) → true；isAsync(OK(42)) → false"
+        }
+      }
+    },
+    "packages/zod/src/v3/errors.ts": {
+      "source_digest": "cb8debd524102d5a38dbaadd72b220f68349dbac51ac9663569c1807f64b3772",
+      "purpose": "管理可替换的全局错误映射函数。",
+      "role": "为解析错误生成提供全局配置入口：默认使用 locales/en.ts 的映射，也允许调用方通过 setErrorMap 覆盖。",
+      "boundary": "负责映射函数的读取与替换；具体错误消息的组装由解析辅助逻辑完成。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/external.ts": {
+      "source_digest": "5d26d2e47e2352def36f89a3e8bf8581da22b7f857e07ef3114cd52cf4813445",
+      "purpose": "汇总并转出 Zod v3 的公共接口。",
+      "role": "把类型实现、错误类和常用辅助工具集中到一处，供 index.ts 等入口统一导出。",
+      "boundary": "这个文件主要组织模块出口，没有独立的运行时函数也属正常。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/index.ts": {
+      "source_digest": "3db2efd285e7328d8014b54a7fce3f4861ebcdc655df40517092ed0050983617",
+      "purpose": "提供 Zod v3 的包级导入入口。",
+      "role": "将 external.ts 的接口同时作为命名导出、z 命名空间和默认导出提供给使用者。",
+      "boundary": "它承担 API 出口组织，不执行实际校验。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/helpers/enumUtil.ts": {
+      "source_digest": "dffcb43b363e6804128c415c128c32dbbda302049cfce7662b2f0e17eeae044e",
+      "purpose": "为枚举相关接口提供 TypeScript 类型运算。",
+      "role": "将字符串联合类型转换为非空字符串元组，辅助枚举 API 保留类型信息。",
+      "boundary": "以编译期类型为主，因此不会出现普通运行时函数列表。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/helpers/errorUtil.ts": {
+      "source_digest": "808aa0875577c556006ca193a5d4bd35a2ade57e50e09199fd9cbf6e780f0a31",
+      "purpose": "统一用户提供的错误消息格式。",
+      "role": "让上层 API 同时接收字符串或带 message 的对象，并转成调用方需要的对象或字符串形式。",
+      "boundary": "属于输入格式适配，不决定某种错误应该显示什么消息。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/helpers/partialUtil.ts": {
+      "source_digest": "68848db44869461bc20373abdcd002e32cb3759e2d5801ba3d9894d2c23db0b1",
+      "purpose": "递归构造 Schema 的 DeepPartial 类型。",
+      "role": "沿对象、数组、可选、可空和元组等 Schema 结构推导深层可选类型，配合上层深度可选功能。",
+      "boundary": "这里只定义类型映射，不是执行数据转换的运行时遍历函数。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/helpers/typeAliases.ts": {
+      "source_digest": "d3cfde44f8089768ebb08098c96d01ca260b88bccf238d55eee93f1c620ff5a5",
+      "purpose": "定义可复用的基础值类型别名。",
+      "role": "用 Primitive 和 Scalars 统一表示原始值以及原始值数组，供其他类型声明引用。",
+      "boundary": "纯类型文件，没有独立业务流程。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/helpers/util.ts": {
+      "source_digest": "df1b9ea5a29a591f273555e240142431617e686aa6a97f172193770c26841a52",
+      "purpose": "提供跨校验器复用的底层工具与类型辅助。",
+      "role": "集中实现值分类、枚举整理、对象合并、数组查找和错误文本格式化，减少各 Schema 实现的重复代码。",
+      "boundary": "既有运行时工具，也有只在 TypeScript 编译期生效的类型运算，需要分开阅读。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/standard-schema.ts": {
+      "source_digest": "e14e38f67bfc8d76e208366f639b73b3292f2bd46c97a44f43535c2389927ece",
+      "purpose": "声明 Standard Schema 的统一校验接口。",
+      "role": "描述外部工具可以依赖的 validate、输入输出类型、成功结果和问题列表等协议形状。",
+      "boundary": "主要是接口契约；单看本文件不会看到完整的具体校验实现。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/ZodError.ts": {
+      "source_digest": "8dfceb801ead825e44bbcca2cb84ea578e6c8cdfef72e3716968386ae3bacb05",
+      "purpose": "定义校验问题的数据结构和 ZodError 错误容器。",
+      "role": "连接底层校验错误与调用方可消费的结果：约定问题代码、路径和消息，并提供格式化与展开等错误读取能力。",
+      "boundary": "关注错误的表示和呈现；具体的类型规则位于 types.ts。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/locales/en.ts": {
+      "source_digest": "f729055c5f4acb839084e5c66c80bdecca02a78df6b048224e56e634322cb223",
+      "purpose": "将结构化校验问题转成默认英文消息。",
+      "role": "根据 ZodIssueCode、期望值和实际值等信息生成可读消息，作为全局错误映射的默认实现。",
+      "boundary": "负责错误文案，不负责决定校验是否通过。",
+      "functions": {}
+    },
+    "packages/zod/src/v3/types.ts": {
+      "source_digest": "1cfe15702dbccfc592bb46679bb6979c6b1b44b9790114a01447436849f0900d",
+      "purpose": "实现 Zod 的核心 Schema 类型与校验行为。",
+      "role": "它是规则执行的主要位置：定义 ZodType 及字符串、数字、对象、数组等 Schema，连接解析入口、组合规则、转换和结果处理。",
+      "boundary": "文件很大，适合先按类或函数定位，再沿主线查看 parseUtil.ts 与 ZodError.ts 等辅助模块。",
+      "functions": {}
+    }
+  }
+}
