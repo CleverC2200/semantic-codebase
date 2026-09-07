@@ -85,7 +85,7 @@ export function createReaderGraphModel(data) {
       const target = definitions.get(f.value.target_definition_key);
       const to = target?.definition_key ?? 'unknown:' + (f.value.call_site_evidence_id ?? f.fact_id ?? index);
       if (!nodes.has(from)) nodes.set(from, { ...functionNode(definitions.get(from)), column: 0 });
-      if (!nodes.has(to)) nodes.set(to, target ? { ...functionNode(target, target.file_path !== root.file_path), column: 2 } :
+      if (!nodes.has(to)) nodes.set(to, target ? { ...functionNode(target, target.file_path !== root.file_path), kind: ['function', 'method'].includes(target.kind) ? (target.file_path === root.file_path ? 'function' : 'external') : (target.file_path === root.file_path ? 'definition' : 'external-definition'), column: 2 } :
         { id: to, kind: 'unknown', title: short(f.value.call), description: '此调用目标未解析', keys: [], facts: [], column: 2 });
       const id = from + '>' + to;
       if (!edges.has(id)) edges.set(id, { id, from, to, kind: target ? 'call' : 'unresolved', label: from === to ? '递归调用' : target ? '调用' : '未解析', facts: [] });
@@ -135,7 +135,7 @@ export function createReaderGraphModel(data) {
     const own = data.facts.filter(f => f.subject.definition_key === key), local = own.find(f => f.kind === 'data_flow');
     const v = local?.value, accesses = v?.accesses ?? [], byId = new Map(accesses.map(a => [a.id, a]));
     const parameters = accesses.filter(a => a.kind === 'definition' && a.block === 0);
-    const writes = own.filter(f => f.kind === 'effect' && ['state', 'database', 'filesystem', 'network', 'event'].includes(f.value.effect_kind));
+    const writes = own.filter(f => f.kind === 'effect' && ['state', 'database', 'file', 'process', 'network', 'event'].includes(f.value.effect_kind));
     const unknowns = new Set(v?.unknowns ?? []), routes = [], reached = new Set(parameters.map(p => p.id));
     const edges = [...(v?.links ?? []).map(l => ({ from: l.definition, to: l.use, kind: 'use' })),
       ...accesses.flatMap(a => (a.inputs ?? []).map(id => ({ from: id, to: a.id, kind: 'value_dependency' })))];

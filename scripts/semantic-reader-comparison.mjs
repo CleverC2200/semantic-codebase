@@ -33,10 +33,24 @@ export async function validateReaderBundle(input) {
   }
   for (const [id, e] of Object.entries(input.evidence)) {
     const file = files.get(e.file_path);
-    if (e.evidence_id !== id || !file || e.source_digest !== file.source_digest || !e.span || e.span.start_byte < 0 || e.span.end_byte < e.span.start_byte || (file.verified && e.span.end_byte > new TextEncoder().encode(file.source).length)) throw new Error('READER_INVALID_EVIDENCE');
+    if ((e.snapshot_id !== undefined && e.snapshot_id !== input.snapshot) || e.evidence_id !== id || !file || e.source_digest !== file.source_digest || !e.span || !Number.isInteger(e.span.start_byte) || !Number.isInteger(e.span.end_byte) || e.span.start_byte < 0 || e.span.end_byte < e.span.start_byte || (file.verified && e.span.end_byte > new TextEncoder().encode(file.source).length)) throw new Error('READER_INVALID_EVIDENCE');
   }
   for (const f of input.facts) {
-    if (!f.subject || (f.subject.kind === 'definition' && !keys.has(f.subject.definition_key)) || !f.value || !Array.isArray(f.evidence_ids) || f.evidence_ids.some(id => !input.evidence[id])) throw new Error('READER_EVIDENCE_NOT_CLOSED');
+    if ((f.snapshot_id !== undefined && f.snapshot_id !== input.snapshot) || !['compiler_exact', 'static_possible', 'framework_heuristic'].includes(f.basis?.kind) || !f.subject || (f.subject.kind === 'definition' && !keys.has(f.subject.definition_key)) || !f.value || !Array.isArray(f.evidence_ids) || f.evidence_ids.some(id => !input.evidence[id])) throw new Error('READER_EVIDENCE_NOT_CLOSED');
+    if (f.kind === 'control_flow' && (!Array.isArray(f.value.blocks) || !Array.isArray(f.value.edges))) throw new Error('READER_INVALID_CONTROL_FLOW');
+    if (f.kind === 'data_flow' && (!Array.isArray(f.value.accesses) || !Array.isArray(f.value.links))) throw new Error('READER_INVALID_DATA_FLOW');
+    const checkReferences = value => {
+      if (!value || typeof value !== 'object') return;
+      for (const [key, item] of Object.entries(value)) {
+        if (key.endsWith('evidence_id') && item !== null && !input.evidence[item]) throw new Error('READER_EVIDENCE_NOT_CLOSED');
+        if (key.endsWith('evidence_ids') && (!Array.isArray(item) || item.some(id => !input.evidence[id]))) throw new Error('READER_EVIDENCE_NOT_CLOSED');
+        if (item && typeof item === 'object') checkReferences(item);
+      }
+    };
+    checkReferences(f.value);
+  }
+  for (const r of input.relations ?? []) {
+    if (r.snapshot_id !== input.snapshot || !keys.has(r.source?.definition_key) || (r.target?.kind === 'definition' && !keys.has(r.target.definition_key)) || !Array.isArray(r.evidence_ids) || r.evidence_ids.some(id => !input.evidence[id])) throw new Error('READER_INVALID_RELATION');
   }
   let runtimeBinding = { valid: false, reason: 'runtime_unavailable' };
   if (input.runtime) {
@@ -45,7 +59,7 @@ export async function validateReaderBundle(input) {
     const valid = digest === observation_set_hash && body.repository_id === input.repository && body.snapshot_id === input.snapshot && body.semantic_overlay_hash === input.overlayHash && Array.isArray(body.observations) && body.observations.every(o => o.execution_id === body.execution_id);
     runtimeBinding = { valid, reason: valid ? null : 'runtime_hash_or_version_mismatch' };
   }
-  return { ...input, runtimeBinding };
+  return { ...input, runtimeBinding, readingImport: true, importanceAnnotations: (input.importanceAnnotations ?? []).map(a => ({ ...a, suppliedStatus: a.status, status: 'candidate', basis: 'imported_unverified' })) };
 }
 
 export function compareReaderSnapshots(base, target, { correspondences = [] } = {}) {
@@ -117,7 +131,8 @@ function readerCodeTokens(source) {
 
 export function describeReaderChange(change, base, target) {
   if (!change.before || !change.after || change.beforeSource === null || change.afterSource === null) return { classification: 'unknown', items: [], checks: ['先核对定义对应与双侧源码，不能据此确认行为变化。'] };
-  const left = readerCodeTokens(change.beforeSource), right = readerCodeTokens(change.afterSource);
+  const supportedTokens = /\.(?:[cm]?[jt]s)$/.test(change.before.file_path) && /\.(?:[cm]?[jt]s)$/.test(change.after.file_path);
+  const left = supportedTokens ? readerCodeTokens(change.beforeSource) : null, right = supportedTokens ? readerCodeTokens(change.afterSource) : null;
   const own = (data, d) => data.facts.filter(f => f.subject.definition_key === d.definition_key);
   const beforeFacts = own(base, change.before), afterFacts = own(target, change.after);
   const items = [];
@@ -129,11 +144,18 @@ export function describeReaderChange(change, base, target) {
   for (const [kind, blockKinds] of [['conditions', ['branch', 'loop']], ['returns', ['return', 'throw']]]) {
     const a = beforeFacts.filter(f => f.kind === 'control_flow'), b = afterFacts.filter(f => f.kind === 'control_flow');
     const project = facts => facts.flatMap(f => f.value.blocks.filter(block => blockKinds.includes(block.kind)).map(block => block.source_excerpt ?? block.kind)).sort();
-    compare(kind, project(a), project(b), a, b);
+    const oldValues = project(a), newValues = project(b);
+    const normalizedValues = values => supportedTokens ? values.map(value => readerCodeTokens(value) ?? value) : values;
+    if (JSON.stringify(normalizedValues(oldValues)) !== JSON.stringify(normalizedValues(newValues))) compare(kind, oldValues, newValues, a, b);
   }
   const effects = facts => facts.filter(f => f.kind === 'effect' && !['return', 'throw', 'await'].includes(f.value.effect_kind));
-  const operations = facts => effects(facts).map(f => ({ kind: f.value.effect_kind, operation: f.value.operation ?? null })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-  compare('writes', operations(beforeFacts), operations(afterFacts), effects(beforeFacts), effects(afterFacts));
+  const operations = (facts, data) => effects(facts).map(f => ({ kind: f.value.effect_kind, operation: f.value.operation ?? null, source: f.evidence_ids.map(id => {
+    const e = data.evidence[id], file = data.files.find(file => file.path === e?.file_path);
+    return file?.verified && e?.span ? new TextDecoder().decode(new TextEncoder().encode(file.source).subarray(e.span.start_byte, e.span.end_byte)) : null;
+  }) })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const oldWrites = operations(beforeFacts, base), newWrites = operations(afterFacts, target);
+  const normalized = writes => writes.map(write => ({ kind: write.kind, operation: write.operation, source: supportedTokens ? write.source.map(readerCodeTokens) : [] }));
+  if (JSON.stringify(normalized(oldWrites)) !== JSON.stringify(normalized(newWrites))) compare('writes', oldWrites, newWrites, effects(beforeFacts), effects(afterFacts));
   const classification = change.kind === 'unchanged' && !items.length ? 'unchanged' : left !== null && left === right && !items.length ? 'comments_or_spacing_only' : items.length ? 'supported_fact_changes' : 'behavior_unknown';
   const directions = { contract: '核对调用方参数和返回值兼容性。', conditions: '验证条件边界、默认值和失败分支。', returns: '核对提前返回与异常处理。', writes: '核对状态一致性、重复执行和恢复边界。' };
   return { classification, items, checks: items.length ? [...new Set(items.map(i => directions[i.kind]))] : classification === 'comments_or_spacing_only' ? ['支持的词法范围内仅注释或空白变化；长期业务重要性仍保留。'] : ['未识别到支持种类的行为差异；不等于行为不变。'] };
@@ -147,7 +169,7 @@ export function reviewReaderChange(change, base, target, { impact = null, verifi
     ['passed', 'failed', 'unknown'].includes(r.status) && r.definitionKeys?.some(k => keys.includes(k)));
   const observation = target.runtime;
   const runtimeObserved = Boolean(target.runtimeBinding?.valid && observation?.snapshot_id === target.snapshot && observation?.repository_id === target.repository &&
-    verification.some(r => r.kind === 'runtime_observed' && r.executionId === observation.execution_id && observation.observations?.some(o => o.definition_key === key)));
+    !observation.coverage?.reason_codes?.includes('trace_source_binding_unverified') && verification.some(r => r.status === 'passed' && r.kind === 'runtime_observed' && r.executionId === observation.execution_id && observation.observations?.some(o => o.definition_key === key)));
   const acceptedImpact = impact?.snapshot === (change.after ? target.snapshot : base.snapshot) && impact?.root === key ? impact : null;
   const checked = new Set(verification.filter(r => r.status === 'passed').flatMap(r => r.checks ?? []));
   const gaps = behavior.items.filter(i => !checked.has(i.kind)).map(i => 'verification_missing:' + i.kind);

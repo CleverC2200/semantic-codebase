@@ -1,0 +1,34 @@
+[
+  {
+    "id": "projection-run",
+    "repository": "reader-controlled-fixture",
+    "baseSnapshot": "before",
+    "targetSnapshot": "after",
+    "definitionKeys": [
+      "after-run"
+    ],
+    "kind": "static_check",
+    "status": "passed",
+    "checks": [
+      "returns"
+    ],
+    "artifact": "test/scripts/semantic-reader-comparison.test.ts",
+    "summary": "受控比较投影测试通过；没有执行示例函数或真实外部操作。"
+  },
+  {
+    "id": "projection-submitPayment",
+    "repository": "reader-controlled-fixture",
+    "baseSnapshot": "before",
+    "targetSnapshot": "after",
+    "definitionKeys": [
+      "after-submitPayment"
+    ],
+    "kind": "static_check",
+    "status": "passed",
+    "checks": [
+      "writes"
+    ],
+    "artifact": "test/scripts/semantic-reader-comparison.test.ts",
+    "summary": "受控比较投影测试通过；没有执行示例函数或真实外部操作。"
+  }
+]

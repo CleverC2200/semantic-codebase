@@ -87,7 +87,7 @@ TypeScript grammar 当前使用锁定的上游未合并提交及本地兼容补�
 
 “变更阅读”可导出当前 `reader-snapshot-v1` JSON，并导入同仓库的基线与目标包。它校验源码哈希、定义范围和 Evidence 引用，保留两个 Snapshot；变化文件中的同名定义不会自动对应，须明确选择并填写核对人和理由。当前比较与人工对应只驻留本次页面。结果区分注释变化、已支持的静态事实差异和无法判断的行为变化，附有界调用影响、INHERITS 依赖和验证缺口。阅读包完整性检查不替代语义准入，导入记录不代表本次已执行测试。
 
-受控桌面比较：分别导入 `test/fixtures/reader-comparison/before.json` 和 `after.json`，确认两侧 `run` 的对应，再点击定义查看源码和“行为影响待核查”。夹具没有编译器事实，不能据此宣称已验证返回行为。验证记录导入格式为 JSON 数组：每项包含 `id`、`repository`、`baseSnapshot`、`targetSnapshot`、`definitionKeys`、`kind`（`static_check/local_test/mock_test/runtime_observed`）、`status`（`passed/failed/unknown`）、`artifact`、`summary`，可选 `checks`（`signature/conditions/returns/effects`）及 `executionId`。只有版本与对象匹配的记录参与展示；没有执行观测时，本地或 Mock 通过不会变成真实环境验收。
+受控桌面比较：分别导入 `test/fixtures/reader-comparison/before.json` 和 `after.json`，确认两侧 `run`、`submitPayment` 的对应。前者有 12 个调用者及返回表达式变化，后者有状态写入变化和资金敏感名称候选；导入同目录 `verification.json` 可核对对应的静态投影检查记录。夹具事实明确标记 `controlled_reader_fixture`，没有运行示例函数或执行付款。详情可分别进入基线／目标函数，再返回原比较。验证记录导入格式为 JSON 数组：每项包含 `id`、`repository`、`baseSnapshot`、`targetSnapshot`、`definitionKeys`、`kind`（`static_check/local_test/mock_test/runtime_observed`）、`status`（`passed/failed/unknown`）、`artifact`、`summary`，可选 `checks`（`contract/conditions/returns/writes`）及 `executionId`。只有版本与对象匹配的记录参与展示；没有执行观测时，本地或 Mock 通过不会变成真实环境验收。
 
 已有预览生成物时，运行 `node scripts/refresh-semantic-preview-html.mjs` 可只刷新 HTML，不重新分析、不调用模型、不改写验收收据。源码片段仅在本地内容哈希与原证据一致时展示。
 

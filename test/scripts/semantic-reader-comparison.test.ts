@@ -74,3 +74,84 @@ test('imported runtime binding is recalculated and rejects forged flags or modif
   const forged = await validateReaderBundle({ ...data, overlayHash: 'h', runtime: { ...runtime, execution_id: 'other' }, runtimeBinding: { valid: true } });
   assert.equal(forged.runtimeBinding.valid, false);
 });
+
+test('indentation changes in non-JavaScript languages are never called spacing-only behavior', () => {
+  const before = snapshot('s1', 'old', 'def run():\n  if ready:\n    send()\n');
+  const after = snapshot('s2', 'new', 'def run():\n  if ready:\n  send()\n');
+  for (const data of [before, after]) { data.files[0].path = 'a.py'; data.definitions[0].file_path = 'a.py'; }
+  const change = compareReaderSnapshots(before, after, { correspondences: [{ baseSnapshot: 's1', targetSnapshot: 's2', baseKey: 'old', targetKey: 'new', actor: 'r', reason: 'fixture' }] }).changes[0];
+  assert.equal(describeReaderChange(change, before, after).classification, 'behavior_unknown');
+});
+
+test('import rejects malformed spans, stale facts and inferred authority; imported decisions remain unverified', async () => {
+  const base = snapshot('s', 'run', 'function run() {}');
+  const evidence = { e: { evidence_id: 'e', file_path: 'a.ts', source_digest: base.files[0].source_digest, span: { start_byte: 0, end_byte: 1 } } };
+  const fact = { fact_id: 'f', kind: 'call_target', subject: { kind: 'definition', definition_key: 'run' }, value: { target_definition_key: 'run', call_site_evidence_id: 'e' }, evidence_ids: ['e'], basis: { kind: 'static_possible' } };
+  for (const span of [{}, { start_byte: '<img src=x>', end_byte: '<img src=x>' }, { start_byte: 0.5, end_byte: 1 }]) {
+    await assert.rejects(validateReaderBundle({ ...base, evidence: { e: { ...evidence.e, span } } }), /EVIDENCE/);
+  }
+  await assert.rejects(validateReaderBundle({ ...base, evidence: { e: { ...evidence.e, snapshot_id: 'old' } } }), /EVIDENCE/);
+  for (const invalid of [{ ...fact, snapshot_id: 'old' }, { ...fact, basis: { kind: 'llm_inferred' } }]) await assert.rejects(validateReaderBundle({ ...base, evidence, facts: [invalid] }), /EVIDENCE/);
+  const imported = await validateReaderBundle({ ...base, evidence, importanceAnnotations: [{ definition_key: 'run', snapshot: 's', category: 'funds', status: 'confirmed', basis: 'llm_inferred', actor: 'json', reason: 'claim', evidence_ids: ['e'], reversibility: 'read_only' }] });
+  // @ts-expect-error standalone reader risk projection
+  const { createReaderRiskModel } = await import('../../scripts/semantic-reader-risk.mjs');
+  assert.equal(createReaderRiskModel(imported).importance('run').sensitivity[0].status, 'candidate');
+  assert.equal(createReaderRiskModel(imported).importance('run').reversibility, 'unknown');
+});
+
+test('assignment changes compare complete source evidence even when extractor operation contains only left side', () => {
+  const before = snapshot('s1', 'old', "function run() { ctx.status = 'pending'; }");
+  const after = snapshot('s2', 'new', "function run() { ctx.status = 'done'; }");
+  const enrich = (data: ReturnType<typeof snapshot>, key: string) => ({ ...data,
+    evidence: { write: { evidence_id: 'write', file_path: 'a.ts', span: { start_byte: 17, end_byte: Buffer.byteLength(data.files[0].source) - 2 } } },
+    facts: [{ kind: 'effect', subject: { definition_key: key }, value: { effect_kind: 'state', operation: 'ctx.status' }, evidence_ids: ['write'] }] });
+  const a = enrich(before, 'old'), b = enrich(after, 'new');
+  const change = compareReaderSnapshots(a, b, { correspondences: [{ baseSnapshot: 's1', targetSnapshot: 's2', baseKey: 'old', targetKey: 'new', actor: 'r', reason: 'fixture' }] }).changes[0];
+  const writes = describeReaderChange(change, a, b).items.find((item: { kind: string }) => item.kind === 'writes');
+  assert.match(writes.before[0].source[0], /pending/);
+  assert.match(writes.after[0].source[0], /done/);
+  assert.equal(writes.beforeFacts[0].evidence_ids[0], 'write');
+});
+
+test('a comment inside an assignment stays a presentation-only edit while evidence preserves the original text', () => {
+  const before = snapshot('s1', 'old', "function run() { ctx.status = 'done'; }");
+  const after = snapshot('s2', 'new', "function run() { ctx.status = /* note */ 'done'; }");
+  const enrich = (data: ReturnType<typeof snapshot>, key: string) => ({ ...data,
+    evidence: { write: { evidence_id: 'write', file_path: 'a.ts', span: { start_byte: 16, end_byte: Buffer.byteLength(data.files[0].source) - 2 } } },
+    facts: [{ kind: 'effect', subject: { definition_key: key }, value: { effect_kind: 'state', operation: 'ctx.status' }, evidence_ids: ['write'] }] });
+  const a = enrich(before, 'old'), b = enrich(after, 'new');
+  const change = compareReaderSnapshots(a, b, { correspondences: [{ baseSnapshot: 's1', targetSnapshot: 's2', baseKey: 'old', targetKey: 'new', actor: 'r', reason: 'fixture' }] }).changes[0];
+  const result = describeReaderChange(change, a, b);
+  assert.equal(result.classification, 'comments_or_spacing_only');
+  assert.equal(result.items.length, 0);
+});
+
+test('controlled high-call and sensitive-operation fixtures support version-bound review records', async () => {
+  const { readFileSync } = await import('node:fs');
+  const read = (name: string) => JSON.parse(readFileSync(new URL('../fixtures/reader-comparison/' + name + '.json', import.meta.url), 'utf8'));
+  const base = await validateReaderBundle(read('before')), target = await validateReaderBundle(read('after'));
+  // @ts-expect-error standalone risk projection
+  const { createReaderRiskModel } = await import('../../scripts/semantic-reader-risk.mjs');
+  const risk = createReaderRiskModel(target);
+  assert.equal(risk.impact('after-run').directCallers.length, 12);
+  assert.equal(risk.importance('after-submitPayment').sensitivity[0].status, 'candidate');
+  assert.equal(risk.importance('after-submitPayment').reversibility, 'state_write');
+  const correspondences = ['run','submitPayment'].map(name => ({ baseSnapshot: 'before', targetSnapshot: 'after', baseKey: 'before-'+name, targetKey: 'after-'+name, actor: 'fixture reviewer', reason: 'controlled correspondence' }));
+  const result = compareReaderSnapshots(base, target, { correspondences });
+  for (const name of ['run','submitPayment']) {
+    const change = result.changes.find((c: { after?: { definition_key: string } }) => c.after?.definition_key === 'after-'+name);
+    const review = reviewReaderChange(change, base, target, { impact: risk.impact('after-'+name), verificationRecords: read('verification') });
+    assert.equal(review.runtimeObserved, false);
+    assert.equal(review.gaps.filter((g: string) => g.startsWith('verification_missing:')).length, 0);
+    assert.equal(review.behavior.classification, 'supported_fact_changes');
+  }
+});
+
+test('comments inside extracted conditions do not create a condition-change item', () => {
+  const before = snapshot('s1', 'old', 'function run() { if (ready) return 1; }');
+  const after = snapshot('s2', 'new', 'function run() { if (/* note */ ready) return 1; }');
+  const facts = (key: string, condition: string) => [{ kind: 'control_flow', subject: { definition_key: key }, value: { blocks: [{ kind: 'branch', source_excerpt: condition }] }, evidence_ids: [] }];
+  const a = { ...before, facts: facts('old', 'ready') }, b = { ...after, facts: facts('new', '/* note */ ready') };
+  const change = compareReaderSnapshots(a, b, { correspondences: [{ baseSnapshot: 's1', targetSnapshot: 's2', baseKey: 'old', targetKey: 'new', actor: 'r', reason: 'fixture' }] }).changes[0];
+  assert.equal(describeReaderChange(change, a, b).classification, 'comments_or_spacing_only');
+});

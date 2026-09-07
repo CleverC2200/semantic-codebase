@@ -183,3 +183,10 @@ test('runtime comparison exposes function observations without claiming inner st
   assert.equal(createReaderGraphModel({ ...data, snapshot: 'new' }).flowObservations('flow', 'exec').status, 'unavailable');
   assert.equal(createReaderGraphModel({ ...data, runtimeBinding: { valid: false } }).flowObservations('flow', 'exec').status, 'unavailable');
 });
+
+test('direct calls retain class identity and data view includes extracted file and process effects', () => {
+  const model = createReaderGraphModel({ definitions: [def('run'), { ...def('Box'), kind: 'class' }], facts: [call('run', 'Box', 'site'),
+    ...['file','process'].map(kind => ({ kind: 'effect', subject: { definition_key: 'run' }, value: { effect_kind: kind, operation: 'write' }, evidence_ids: ['e'] }))] });
+  assert.equal(model.functionCalls('run').nodes.find((n: { id: string }) => n.id === 'Box').kind, 'definition');
+  assert.deepEqual(model.dataFlow('run').writes.map((f: { value: { effect_kind: string } }) => f.value.effect_kind), ['file', 'process']);
+});
