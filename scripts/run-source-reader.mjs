@@ -19,7 +19,14 @@ const files = names.sort().map(relative_path => {
   const source_bytes = readFileSync(target);
   return { relative_path, language: relative_path.endsWith('.py') ? 'python' : 'typescript', source_bytes, source_digest: sha256Bytes(source_bytes) };
 });
-const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding:'utf8' }).trim();
+const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding:'utf8', stdio:['ignore','pipe','pipe'] }).trim();
+// Git walks upward: only an exact source root may claim a repository HEAD.
+let sourceIdentity = { source_kind:'directory_snapshot', source_head:null, source_status:null, source_git_reason:'git_unavailable' };
+try {
+  if (realpathSync(git('rev-parse','--show-toplevel')) === repo) {
+    sourceIdentity = { source_kind:'git_root', source_head:git('rev-parse','HEAD'), source_status:git('status','--porcelain'), source_git_reason:null };
+  } else sourceIdentity.source_git_reason = 'enclosing_repository';
+} catch { /* Directory snapshots remain identified by their content manifest. */ }
 const source = { repository_id: path.basename(repo) + '-source-reader', files };
 const started = performance.now();
 if (new Set(files.map(f=>f.language)).size!==1) throw new Error('Select one language per analysis manifest');
@@ -33,7 +40,7 @@ const toolFiles = directory => readdirSync(path.join(productRoot,directory),{wit
 const productFiles = [...toolFiles('dist'),...toolFiles('scripts'),'package-lock.json'].sort();
 const receipt = {
   schema_version: 1, generated_at: new Date().toISOString(), source_root: repo,
-  source_head: git('rev-parse','HEAD'), source_status: git('status','--porcelain'),
+  ...sourceIdentity,
   snapshot_id: state.snapshot_id, overlay_hash: overlay.overlay_hash,
   files: files.map(({relative_path,source_digest})=>({relative_path,source_digest})),
   manifest_hash: canonicalHash(files.map(({relative_path,source_digest})=>({relative_path,source_digest}))),

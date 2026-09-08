@@ -21,3 +21,5 @@ python3 -m http.server 8773 --bind 127.0.0.1 --directory .workspace/acceptance
 输出 `reader-data.json`、`receipt.json` 和 `acceptance.html`。收据记录输入哈希、Snapshot/Overlay、生成器哈希、Node、策略、预算、耗时和人工配置数量；生成对象不含时间戳。原人工配置保留在 manualMappings，不纳入自动覆盖。HTML 最多显示每组 50 条依据及每条 20 个证据，完整引用在 JSON。
 
 本次独立源码核对点与验收边界见 [源码核对点](receipts/grouping-source-checkpoints-2026-09-07.md) 和 [本地验收](receipts/grouping-acceptance-2026-09-07.md)。
+
+来源身份：只有样本目录恰为 Git 工作树根目录时才记录 source_head / source_status。目录拷贝（包括 references 样本）标为 directory_snapshot，Git 字段为 null，冻结身份由逐文件 digest 与 manifest_hash 给出；不会继承父仓库 HEAD。

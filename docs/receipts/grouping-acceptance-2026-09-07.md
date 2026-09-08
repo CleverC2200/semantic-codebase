@@ -9,8 +9,8 @@
 
 以上仅单次本机测量（Node 24.14.1）；默认定义 10,000、关联 50,000、建议 200 的数量预算。10,800 定义夹具中归属 10,000，其余 800 完整保留，定向测试含构造约 60 ms；不声称 p95 或任意规模 SLA。Poetry 100/20/2 限制输出保留全部 1,378 定义，其中 1,278 未归类，6,018 关联未处理；界面标 partial / business unknown。
 
-- codegraph: source HEAD `3860feaaa14a3376478281d10e2ff6064977c686`；Snapshot `6035ff72515e480e59119ca6eb03657cebaf78236c7224b07f36920a9ac961b8`；Overlay `e4abbc468f08daa3a36d0b54862527aedd7fd502f274d42fa1cf3eeea915b247`。
-- poetry: source HEAD `3860feaaa14a3376478281d10e2ff6064977c686`；Snapshot `59d9da2f0d7782f0563beeee18d9d0d7dd9063a61167404d36a69eaddfeefcb3`；Overlay `bce9a4b26d9fcb96a80787771feaacab55386ed7413bcf2b87f7d498bee7daac`。
+- codegraph: 目录样本（原 source HEAD 字段误取外层仓库，已撤回该提交身份声明）；Snapshot `6035ff72515e480e59119ca6eb03657cebaf78236c7224b07f36920a9ac961b8`；Overlay `e4abbc468f08daa3a36d0b54862527aedd7fd502f274d42fa1cf3eeea915b247`。
+- poetry: 目录样本（原 source HEAD 字段误取外层仓库，已撤回该提交身份声明）；Snapshot `59d9da2f0d7782f0563beeee18d9d0d7dd9063a61167404d36a69eaddfeefcb3`；Overlay `bce9a4b26d9fcb96a80787771feaacab55386ed7413bcf2b87f7d498bee7daac`。
 
 策略 reader-groups-v1；最终生成器与算法哈希、输入哈希和 Node 记录在本地产物 receipt.json。源码、Definition、Fact、Evidence 数组和 Snapshot/Overlay 在分组前后逐项一致，输入文件 SHA 与收据一致。没有默认模型调用、网络请求、样本执行或业务写入。
 
@@ -36,7 +36,7 @@
 
 ## 复现
 
-先 npm run build；本地 references 固定到上列 HEAD，用 grouping-inputs 下对应 JSON 作为范围：
+先 npm run build；本地 references 是目录样本，需核对 source receipt 中的逐文件 digest / manifest_hash，用 grouping-inputs 下对应 JSON 作为范围：
 
 ```sh
 node scripts/run-source-reader.mjs references/codegraph docs/receipts/grouping-inputs/codegraph.json .workspace/acceptance/new-codegraph-source
@@ -46,3 +46,7 @@ node scripts/run-reader-grouping.mjs .workspace/acceptance/new-poetry-source/rea
 ```
 
 输出目录必须新建。生成、读取和重生成使用同一公开 grouping 入口；既有冻结分析可复用。原有无关工作树改动未纳入本次提交；没有 push、关闭 Issue、部署或 OA 真实环境动作。
+
+## 2026-09-08 勘误
+
+旧 JSON 收据中的 source_head/source_status 来自外层产品仓库，不能证明样本 Git 身份；旧产物保留作历史记录，不回写冻结 Snapshot / Overlay。新入口只为根目录吻合的 Git 源记录 HEAD，其余标 directory_snapshot，source_head/source_status 为 null。新验收见 [来源修正与扩展索引](grouping-followup-2026-09-08.md)。
