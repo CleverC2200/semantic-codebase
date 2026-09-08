@@ -1,0 +1,698 @@
+{
+  "schema": "reader-snapshot-v1",
+  "repository": "reader-controlled-fixture",
+  "snapshot": "after",
+  "overlayHash": "fixture",
+  "coverage": {
+    "status": "partial",
+    "reason_codes": [
+      "controlled_fixture"
+    ]
+  },
+  "files": [
+    {
+      "path": "example.ts",
+      "source": "export function run(value: number) { return value + 1; }\n",
+      "verified": true,
+      "source_digest": "f84d97c38f872047fcb82991f78fb3d69047015b0a23a72a26a1540df299126c"
+    },
+    {
+      "path": "payment.ts",
+      "source": "export function submitPayment(ctx: any) { ctx.status = 'done'; }\n",
+      "verified": true,
+      "source_digest": "eff7a2ae1caa69d7a4f54cee71d84a1b37cc28a3a1953f23a7aa9fef1281b4dd"
+    },
+    {
+      "path": "callers.ts",
+      "source": "export function caller0() { return run(0); }\nexport function caller1() { return run(1); }\nexport function caller2() { return run(2); }\nexport function caller3() { return run(3); }\nexport function caller4() { return run(4); }\nexport function caller5() { return run(5); }\nexport function caller6() { return run(6); }\nexport function caller7() { return run(7); }\nexport function caller8() { return run(8); }\nexport function caller9() { return run(9); }\nexport function caller10() { return run(10); }\nexport function caller11() { return run(11); }\n",
+      "verified": true,
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638"
+    }
+  ],
+  "definitions": [
+    {
+      "definition_key": "after-run",
+      "qualified_name": "run",
+      "kind": "function",
+      "file_path": "example.ts",
+      "definition_span": {
+        "start_byte": 0,
+        "end_byte": 56
+      },
+      "line": 1,
+      "endLine": 1
+    },
+    {
+      "definition_key": "after-submitPayment",
+      "qualified_name": "submitPayment",
+      "kind": "function",
+      "file_path": "payment.ts",
+      "definition_span": {
+        "start_byte": 0,
+        "end_byte": 64
+      },
+      "line": 1,
+      "endLine": 1
+    },
+    {
+      "definition_key": "after-caller0",
+      "qualified_name": "caller0",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 0,
+        "end_byte": 44
+      },
+      "line": 1,
+      "endLine": 1
+    },
+    {
+      "definition_key": "after-caller1",
+      "qualified_name": "caller1",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 45,
+        "end_byte": 89
+      },
+      "line": 2,
+      "endLine": 2
+    },
+    {
+      "definition_key": "after-caller2",
+      "qualified_name": "caller2",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 90,
+        "end_byte": 134
+      },
+      "line": 3,
+      "endLine": 3
+    },
+    {
+      "definition_key": "after-caller3",
+      "qualified_name": "caller3",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 135,
+        "end_byte": 179
+      },
+      "line": 4,
+      "endLine": 4
+    },
+    {
+      "definition_key": "after-caller4",
+      "qualified_name": "caller4",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 180,
+        "end_byte": 224
+      },
+      "line": 5,
+      "endLine": 5
+    },
+    {
+      "definition_key": "after-caller5",
+      "qualified_name": "caller5",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 225,
+        "end_byte": 269
+      },
+      "line": 6,
+      "endLine": 6
+    },
+    {
+      "definition_key": "after-caller6",
+      "qualified_name": "caller6",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 270,
+        "end_byte": 314
+      },
+      "line": 7,
+      "endLine": 7
+    },
+    {
+      "definition_key": "after-caller7",
+      "qualified_name": "caller7",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 315,
+        "end_byte": 359
+      },
+      "line": 8,
+      "endLine": 8
+    },
+    {
+      "definition_key": "after-caller8",
+      "qualified_name": "caller8",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 360,
+        "end_byte": 404
+      },
+      "line": 9,
+      "endLine": 9
+    },
+    {
+      "definition_key": "after-caller9",
+      "qualified_name": "caller9",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 405,
+        "end_byte": 449
+      },
+      "line": 10,
+      "endLine": 10
+    },
+    {
+      "definition_key": "after-caller10",
+      "qualified_name": "caller10",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 450,
+        "end_byte": 496
+      },
+      "line": 11,
+      "endLine": 11
+    },
+    {
+      "definition_key": "after-caller11",
+      "qualified_name": "caller11",
+      "kind": "function",
+      "file_path": "callers.ts",
+      "definition_span": {
+        "start_byte": 497,
+        "end_byte": 543
+      },
+      "line": 12,
+      "endLine": 12
+    }
+  ],
+  "facts": [
+    {
+      "fact_id": "after-control_flow-run",
+      "kind": "control_flow",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-run"
+      },
+      "value": {
+        "entry": 0,
+        "exit": 1,
+        "blocks": [
+          {
+            "id": 0,
+            "kind": "entry"
+          },
+          {
+            "id": 1,
+            "kind": "exit"
+          },
+          {
+            "id": 2,
+            "kind": "return",
+            "source_excerpt": "return value + 1;",
+            "evidence_id": "after-return"
+          }
+        ],
+        "edges": [
+          {
+            "to": 2,
+            "kind": "next",
+            "from": 0
+          },
+          {
+            "to": 1,
+            "kind": "return",
+            "from": 2
+          }
+        ],
+        "unknowns": [
+          "fixture_scope"
+        ]
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-return"
+      ]
+    },
+    {
+      "fact_id": "after-effect-submitPayment",
+      "kind": "effect",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-submitPayment"
+      },
+      "value": {
+        "effect_kind": "state",
+        "operation": "ctx.status"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-write"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller0",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller0"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call0"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call0"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller1",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller1"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call1"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call1"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller2",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller2"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call2"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call2"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller3",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller3"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call3"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call3"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller4",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller4"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call4"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call4"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller5",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller5"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call5"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call5"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller6",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller6"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call6"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call6"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller7",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller7"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call7"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call7"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller8",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller8"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call8"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call8"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller9",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller9"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call9"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call9"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller10",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller10"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call10"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call10"
+      ]
+    },
+    {
+      "fact_id": "after-call_target-caller11",
+      "kind": "call_target",
+      "subject": {
+        "kind": "definition",
+        "definition_key": "after-caller11"
+      },
+      "value": {
+        "call": "run",
+        "target_definition_key": "after-run",
+        "call_site_evidence_id": "after-call11"
+      },
+      "basis": {
+        "kind": "static_possible",
+        "rule_id": "controlled_reader_fixture",
+        "reason_codes": [
+          "fixture_not_compiler_receipt"
+        ]
+      },
+      "evidence_ids": [
+        "after-call11"
+      ]
+    }
+  ],
+  "evidence": {
+    "after-return": {
+      "evidence_id": "after-return",
+      "file_path": "example.ts",
+      "span": {
+        "start_byte": 37,
+        "end_byte": 54
+      },
+      "source_digest": "f84d97c38f872047fcb82991f78fb3d69047015b0a23a72a26a1540df299126c",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-write": {
+      "evidence_id": "after-write",
+      "file_path": "payment.ts",
+      "span": {
+        "start_byte": 42,
+        "end_byte": 61
+      },
+      "source_digest": "eff7a2ae1caa69d7a4f54cee71d84a1b37cc28a3a1953f23a7aa9fef1281b4dd",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call0": {
+      "evidence_id": "after-call0",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 35,
+        "end_byte": 41
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call1": {
+      "evidence_id": "after-call1",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 80,
+        "end_byte": 86
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call2": {
+      "evidence_id": "after-call2",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 125,
+        "end_byte": 131
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call3": {
+      "evidence_id": "after-call3",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 170,
+        "end_byte": 176
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call4": {
+      "evidence_id": "after-call4",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 215,
+        "end_byte": 221
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call5": {
+      "evidence_id": "after-call5",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 260,
+        "end_byte": 266
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call6": {
+      "evidence_id": "after-call6",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 305,
+        "end_byte": 311
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call7": {
+      "evidence_id": "after-call7",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 350,
+        "end_byte": 356
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call8": {
+      "evidence_id": "after-call8",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 395,
+        "end_byte": 401
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call9": {
+      "evidence_id": "after-call9",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 440,
+        "end_byte": 446
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call10": {
+      "evidence_id": "after-call10",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 486,
+        "end_byte": 493
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    },
+    "after-call11": {
+      "evidence_id": "after-call11",
+      "file_path": "callers.ts",
+      "span": {
+        "start_byte": 533,
+        "end_byte": 540
+      },
+      "source_digest": "44dbd4102e3efa9343dcaef23ba949614d55345413de13201827636cbfbd8638",
+      "producer": "controlled-reader-fixture"
+    }
+  },
+  "relations": []
+}

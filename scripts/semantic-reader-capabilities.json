@@ -1,0 +1,54 @@
+[
+  {
+    "id": "zod",
+    "kind": "system",
+    "title": "Zod",
+    "parent": null,
+    "description": "从源码支持的解析处理片段开始阅读；不是整个库的完整能力地图。",
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645",
+      "packages/zod/src/v3/errors.ts": "cb8debd524102d5a38dbaadd72b220f68349dbac51ac9663569c1807f64b3772"
+    }
+  },
+  {
+    "id": "parsing",
+    "kind": "domain",
+    "title": "解析处理",
+    "parent": "zod",
+    "description": "组织解析问题与结果状态。",
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645",
+      "packages/zod/src/v3/errors.ts": "cb8debd524102d5a38dbaadd72b220f68349dbac51ac9663569c1807f64b3772"
+    }
+  },
+  {
+    "id": "issues",
+    "kind": "feature",
+    "title": "错误收集",
+    "parent": "parsing",
+    "description": "生成问题并追加到解析上下文。",
+    "mainlines": [
+      "issue-collection"
+    ],
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645",
+      "packages/zod/src/v3/errors.ts": "cb8debd524102d5a38dbaadd72b220f68349dbac51ac9663569c1807f64b3772"
+    }
+  },
+  {
+    "id": "results",
+    "kind": "feature",
+    "title": "结果合并",
+    "parent": "parsing",
+    "description": "合并数组与对象子项的解析结果。",
+    "mainlines": [
+      "array-merge",
+      "object-merge",
+      "async-object-merge"
+    ],
+    "source_digests": {
+      "packages/zod/src/v3/helpers/parseUtil.ts": "cb94690c02dce392b98ca364de0d4b24f42db715fbb1759a08bcfb7fa6674645",
+      "packages/zod/src/v3/errors.ts": "cb8debd524102d5a38dbaadd72b220f68349dbac51ac9663569c1807f64b3772"
+    }
+  }
+]

@@ -225,3 +225,20 @@ test("anonymous callables are diagnosed while stable callable bindings remain de
     1,
   );
 });
+
+test('contextual unique remains a value identifier in comparison expressions', () => {
+  const source='declare const marker: unique symbol; function scan(unique: string[]) { for (let i=0; i<unique.length; i++) {} return unique.length; }';
+  const slice=extract(new TypeScriptTreeSitterAdapter(),source,'typescript','unique.ts');
+  assert.equal(slice.coverage.status,'complete');
+  assert.equal(slice.diagnostics.some(d=>d.severity==='error'),false);
+  assertDefinitionSpans(source,slice);
+});
+
+test('literal NUL inside quoted strings preserves bytes and following definitions', () => {
+  const source=`function first() { return 'before\0after'; }\nfunction second() { return "\0\0"; }\nfunction third() { return 3; }`;
+  const slice=extract(new TypeScriptTreeSitterAdapter(),source,'typescript','nul.ts');
+  assert.equal(slice.coverage.status,'complete');
+  assert.deepEqual(slice.definitions.map(d=>d.name),['first','second','third']);
+  assertDefinitionSpans(source,slice);
+  for(const invalid of ['const x = "unterminated\0', 'const x = \0;'])assert.notEqual(extract(new TypeScriptTreeSitterAdapter(),invalid,'typescript','invalid.ts').coverage.status,'complete');
+});

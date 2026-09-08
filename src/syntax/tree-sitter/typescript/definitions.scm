@@ -4,6 +4,9 @@
 (class_declaration
   name: (type_identifier) @class.name) @class.definition
 
+(abstract_class_declaration
+  name: (type_identifier) @class.name) @class.definition
+
 (interface_declaration
   name: (type_identifier) @interface.name) @interface.definition
 

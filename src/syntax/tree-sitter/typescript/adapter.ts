@@ -17,14 +17,14 @@ const DEFAULT_QUERY = readFileSync(new URL("./definitions.scm", import.meta.url)
 const DEFAULT_RELATIONS_QUERY = readFileSync(new URL("./relations.scm", import.meta.url), "utf8");
 const require = createRequire(import.meta.url);
 const GRAMMAR_DIGEST = sha256Bytes(readFileSync(require.resolve("tree-sitter-typescript/typescript/src/parser.c")));
-if (GRAMMAR_DIGEST !== "1c28b7548c12fd4edaf30668c31bf35453ebf032e57b066020e73007d59050db") {
+if (GRAMMAR_DIGEST !== "aab8611ac5315d03eb6637d7c135a8900b905c9864322d5ab2c1343d0df13621") {
   throw new Error("TypeScript grammar is not prepared; run npm run prepare:grammar (full development dependencies required)");
 }
 // Detect a stale native/prebuilt binding even when generated sources are current.
 {
   const grammarProbe = new Parser();
   grammarProbe.setLanguage(TypeScriptGrammar.typescript);
-  if (grammarProbe.parse("interface Box<out T, in U, in out V, out> {}").rootNode.hasError) {
+  if (["interface Box<out T, in U, in out V, out> {}", "function scan(unique: string[]) { for(let i=0;i<unique.length;i++) {} }", "const value = 'before\0after';"].some(source => grammarProbe.parse(source).rootNode.hasError)) {
     throw new Error("TypeScript native grammar is stale; run npm run prepare:grammar");
   }
 }
@@ -39,7 +39,7 @@ export class TypeScriptTreeSitterAdapter extends TreeSitterSyntaxAdapter {
         runtime: { id: "tree-sitter", version: "0.21.1" },
         grammar: {
           id: "tree-sitter-typescript/typescript",
-          version: "0.23.2-scb.1",
+          version: "0.23.2-scb.2",
           digest: GRAMMAR_DIGEST,
         },
         capabilities: {

@@ -184,3 +184,15 @@ test("failed incremental build never publishes a partial Ready state", () => {
   );
   assert.equal(first.graph.coverage.status, "ready");
 });
+
+test('abstract classes own implements relations and inherited methods in Ready snapshots', () => {
+  const text='interface Transport {} abstract class Base implements Transport { send() {} } class Stdio extends Base {}';
+  const state=indexer().buildFull(source([['transport.ts','typescript',text]])).state;
+  const base=state.graph.definitions.find(d=>d.qualified_name==='Base');
+  assert.equal(base?.kind,'class');
+  const relation=state.graph.relations.find(r=>r.kind==='IMPLEMENTS');
+  assert.equal(relation?.source.kind,'definition');
+  if(relation?.source.kind==='definition')assert.equal(relation.source.definition_key,base?.definition_key);
+  assert.ok(state.graph.relations.some(r=>r.kind==='INHERITS'));
+  assert.equal(state.graph.coverage.status,'ready');
+});
