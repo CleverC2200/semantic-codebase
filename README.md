@@ -62,7 +62,7 @@ npm run demo:local
 
 已有本地 `references/zod/` 冻结语料时，`npm run preview:semantic` 同时展示 Zod TypeScript、Python/Pyright、冻结 OTLP Trace、Capability Candidate 和本地中文 Evidence Answer。它的 Gold 是输出指纹回归，不是独立准确率验收。
 
-TypeScript grammar 当前使用锁定的上游未合并提交及本地兼容补丁，以支持 Zod v4 的 `in/out` 类型参数，同时保留普通参数名 `out`。`npm install` / `npm ci` 的 `postinstall` 会生成 ABI 14 parser 并编译原生绑定；开发安装需要完整 devDependencies、Python、C/C++ 编译工具和 make（macOS 可用 Xcode Command Line Tools）。不支持跳过安装脚本后直接运行，也尚未验证 `--omit=dev` 部署安装。手动恢复命令为 `npm run prepare:grammar`。源码不会被预处理或改写；升级后请用 `sync` 重建旧索引。详见 [grammar 兼容性验证记录](docs/receipts/final-diff-review-2026-09-06.md)。
+TypeScript grammar 当前使用锁定的上游未合并提交及本地兼容补丁，以支持 Zod v4 的 `in/out` 类型参数，同时保留普通参数名 `out`、比较表达式中的上下文标识符 `unique` 和引号内的实际 NUL 字节（grammar profile `0.23.2-scb.2`）。`npm install` / `npm ci` 的 `postinstall` 会生成 ABI 14 parser 并编译原生绑定；开发安装需要完整 devDependencies、Python、C/C++ 编译工具和 make（macOS 可用 Xcode Command Line Tools）。不支持跳过安装脚本后直接运行，也尚未验证 `--omit=dev` 部署安装。手动恢复命令为 `npm run prepare:grammar`。源码不会被预处理或改写；升级后请用 `sync` 重建旧索引。详见 [grammar 兼容性验证记录](docs/receipts/final-diff-review-2026-09-06.md)。
 
 生成物位于 `.workspace/acceptance/semantic-preview/`：
 

@@ -24,3 +24,5 @@
 复现 176 文件范围可使用 [明确范围清单](grouping-inputs/codegraph-176.json) 与公开 run-source-reader / run-reader-grouping 入口；排除文件及原因必须随范围保留。旧 4 文件清单继续用于小范围回归。
 
 验证：隔离的待提交树构建及全量测试 255/255 通过；语法/关系/增量定向测试 23/23，来源 CLI 回归 2/2，typecheck 通过。两份新阅读包逐项对比 files/definitions/facts/evidence/Snapshot/Overlay 与原分析一致，阅读模型初始化通过。Standards / Spec 两轴独立审查均无剩余发现。本轮未改 UI，未重复桌面交互旅程，也不声明真实应用运行验收。
+
+后续进展：剩余 grammar 兼容问题已在下一批修复中解决，完整 179 文件结果见 [全范围 grammar 验收](grouping-grammar-2026-09-08.md)。本文 176 文件记录仍为当时的冻结验收，不回写为全量成功。
