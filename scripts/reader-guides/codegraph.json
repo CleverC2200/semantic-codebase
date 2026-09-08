@@ -1,0 +1,926 @@
+{
+  "schema": "reader-guide-v1",
+  "repository": "codegraph-source-reader",
+  "snapshot": "546de0ef32493c3b8e9838a0a6163ad398dc98b7452d7c996c3707078b026bac",
+  "source_digests": {
+    "src/bin/codegraph.ts": "d108343309934cd0c6a15263e5c09a9af01ec9c8dc31eb4be36b75101814a07a",
+    "src/extraction/index.ts": "6fbdb733467236d55ff8116f8e0078a6a5abac28d8a256296f48eb2c2c10517f",
+    "src/index.ts": "fe1dbbf68ff2426b4a17eb3e1542757fdac1e4a9caf5264fe7715566f2e5904b",
+    "src/mcp/explore-dedup.ts": "9b8c8a36c95a315780eded0d5d524dcac03e6606a7ff55c882aae7f8e73c42e2",
+    "src/mcp/tools.ts": "180d01079101e72ee5579c19443f962ac6f15e91c7faf3dd9cd39b7b5a460240",
+    "src/sync/watcher.ts": "8d37bdc511692ab4d3ae2a22be1ea5ea5027e037df9a5125fe8ddbf98133803e"
+  },
+  "overview": {
+    "purpose": "CodeGraph 将项目源码提取为可查询的结构索引，支持索引更新、代码关系查询与面向 AI 工具的上下文读取。",
+    "boundary": "本包仅含 179 个 TypeScript 文件的冻结源码与 partial 静态分析。代码阅读器本身是 Semantic Codebase；此处展示的是被分析的 CodeGraph 项目。未执行被索引项目，推荐能力与主线说明均待复核。",
+    "capabilities": [
+      {
+        "id": "codegraph-index",
+        "title": "建立项目索引",
+        "description": "从 CLI 初始化索引，经过抽取、存储和引用解析，返回带计数与错误的索引结果。",
+        "reason": "第一次阅读先看索引如何从入口建立。",
+        "entry": {
+          "type": "mainline",
+          "key": "codegraph-index"
+        }
+      },
+      {
+        "id": "codegraph-sync",
+        "title": "增量同步源码变化",
+        "description": "从同步入口协调文件变化，重建变化文件、修复引用，并返回本次同步统计。",
+        "reason": "随后看已有索引怎样反映源码变化。",
+        "entry": {
+          "type": "mainline",
+          "key": "codegraph-sync"
+        }
+      },
+      {
+        "id": "codegraph-context-dedup",
+        "title": "上下文去重与回指",
+        "description": "把本次拟发送的源码与会话已有内容比较，区分应发送的范围与可用回指替代的范围。",
+        "reason": "最后看索引如何服务上下文读取，以及去重规则的例外。",
+        "entry": {
+          "type": "mainline",
+          "key": "codegraph-context-dedup"
+        }
+      }
+    ]
+  },
+  "mainlines": [
+    {
+      "id": "codegraph-index",
+      "title": "建立项目索引",
+      "purpose": "从 CLI 初始化索引，经过抽取、存储和引用解析，返回带计数与错误的索引结果。",
+      "trigger": "CLI 初始化命令调用 runIndex；CodeGraph.indexAll 也可被 API 调用。",
+      "input": "项目实例、进度回调、取消信号与运行选项。",
+      "output": "返回 IndexResult；实际成功与范围由 success、文件计数、错误和索引状态共同表达。",
+      "boundary": "仅展示有源码支持的关键编排；语言抽取、数据库及框架内部路径仍 partial。finally 是异常清理关系，不是另一条成功主线。",
+      "source_digests": {
+        "src/bin/codegraph.ts": "d108343309934cd0c6a15263e5c09a9af01ec9c8dc31eb4be36b75101814a07a",
+        "src/index.ts": "fe1dbbf68ff2426b4a17eb3e1542757fdac1e4a9caf5264fe7715566f2e5904b"
+      },
+      "stages": [
+        {
+          "id": "start",
+          "title": "选择进度并启动索引",
+          "description": "CLI 安装监督器，按 verbose 选择进度输出，再等待 CodeGraph.indexAll。",
+          "anchors": [
+            {
+              "file": "src/bin/codegraph.ts",
+              "function": "main.runIndex",
+              "definition_key": "bd5e628b363f0eede8098fc7183eef9440fac5be29513a6f7a7b9f916370317d",
+              "match": "const supervision = installCommandSupervision('init', { progressPaths: [dbPath, `${dbPath}-wal`] });"
+            },
+            {
+              "file": "src/bin/codegraph.ts",
+              "function": "main.runIndex",
+              "definition_key": "bd5e628b363f0eede8098fc7183eef9440fac5be29513a6f7a7b9f916370317d",
+              "match": "return await cg.indexAll({ onProgress: createVerboseProgress(), verbose: true });"
+            }
+          ],
+          "kind": "stage",
+          "boundary": "async",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "lock",
+          "title": "取得索引锁",
+          "description": "互斥锁内获取文件锁。获取失败返回 success=false，后续抽取不会执行。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "this.fileLock.acquire();"
+            },
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "message: 'Could not acquire file lock - another process may be indexing'"
+            }
+          ],
+          "kind": "stage",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "extract",
+          "title": "抽取并存储文件",
+          "description": "标记索引进行中并进入批量写入；等待抽取编排器，finally 收尾批量加载。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "this.queries.setMetadata('index_state', 'indexing');"
+            },
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "result = await this.orchestrator.indexAll("
+            }
+          ],
+          "kind": "stage",
+          "boundary": "state",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "resolve",
+          "title": "解析跨文件引用",
+          "description": "仅在抽取成功且有已索引文件时初始化框架解析；再按已有解析条件执行批量引用解析及后续关联。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "this.resolver.initialize();"
+            },
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "await this.resolveReferencesBatched("
+            }
+          ],
+          "kind": "stage",
+          "boundary": "async",
+          "column": 0,
+          "row": 1
+        },
+        {
+          "id": "result",
+          "title": "返回结果并记录完成范围",
+          "description": "根据扫描与处理计数记录完成状态，再返回 IndexResult；不能把有返回值自动视为全仓库成功。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "const accounted = result.filesIndexed + result.filesSkipped + result.filesErrored;"
+            },
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "return result;"
+            }
+          ],
+          "kind": "stage",
+          "outcome": "success",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "cleanup",
+          "title": "释放锁与监督器",
+          "description": "退出索引 try 时恢复相关数据库设置并释放文件锁；CLI finally 停止监督器。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "this.fileLock.release();"
+            },
+            {
+              "file": "src/bin/codegraph.ts",
+              "function": "main.runIndex",
+              "definition_key": "bd5e628b363f0eede8098fc7183eef9440fac5be29513a6f7a7b9f916370317d",
+              "match": "supervision.stop();"
+            }
+          ],
+          "kind": "stage",
+          "boundary": "state",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "lock-failure",
+          "title": "锁不可用时中止",
+          "description": "获取文件锁失败直接返回错误结果，不能据此宣称索引完成。 CLI 的 finally 仍停止监督器；未取得文件锁，因此此分支不进入文件锁的释放清理。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.indexAll",
+              "definition_key": "3151020eb931f73defb2c18c02fb176f505b4e99a560249284d7a0cdde76be95",
+              "match": "return { success: false, filesIndexed: 0, filesSkipped: 0, filesErrored: 0, nodesCreated: 0, edgesCreated: 0, errors: [{ message: 'Could not acquire file lock - another process may be indexing', severity: 'error' as const }], durationMs: 0 };"
+            },
+            {
+              "file": "src/bin/codegraph.ts",
+              "function": "main.runIndex",
+              "definition_key": "bd5e628b363f0eede8098fc7183eef9440fac5be29513a6f7a7b9f916370317d",
+              "match": "supervision.stop();"
+            }
+          ],
+          "kind": "stage",
+          "outcome": "failure",
+          "column": 0,
+          "row": 2
+        }
+      ],
+      "edges": [
+        {
+          "id": "start>lock",
+          "from": "start",
+          "to": "lock",
+          "label": "调用"
+        },
+        {
+          "id": "lock>extract",
+          "from": "lock",
+          "to": "extract",
+          "label": "获取锁成功"
+        },
+        {
+          "id": "lock>lock-failure",
+          "from": "lock",
+          "to": "lock-failure",
+          "label": "获取锁失败"
+        },
+        {
+          "id": "extract>resolve",
+          "from": "extract",
+          "to": "resolve",
+          "label": "抽取后按条件解析"
+        },
+        {
+          "id": "resolve>result",
+          "from": "resolve",
+          "to": "result",
+          "label": "编排正常完成"
+        },
+        {
+          "id": "result>cleanup",
+          "from": "result",
+          "to": "cleanup",
+          "label": "退出 try"
+        },
+        {
+          "id": "extract>cleanup",
+          "from": "extract",
+          "to": "cleanup",
+          "label": "异常也进入 finally"
+        }
+      ]
+    },
+    {
+      "id": "codegraph-sync",
+      "title": "增量同步源码变化",
+      "purpose": "从同步入口协调文件变化，重建变化文件、修复引用，并返回本次同步统计。",
+      "trigger": "手动调用 CodeGraph.sync；自动观察器可经同步回调触发，回调内部身份由调用方决定。",
+      "input": "可选精确路径、进度回调，以及已有索引和当前文件系统。",
+      "output": "SyncResult 统计新增、修改、删除与更新节点；锁不可用返回零值统计，不能当作成功完成。",
+      "boundary": "size/mtime 相同会跳过内容哈希，保留该检测盲点；不可读取文件可能跳过。观察器失败恢复是条件路径，未验证真实文件系统或数据库执行。",
+      "source_digests": {
+        "src/extraction/index.ts": "6fbdb733467236d55ff8116f8e0078a6a5abac28d8a256296f48eb2c2c10517f",
+        "src/index.ts": "fe1dbbf68ff2426b4a17eb3e1542757fdac1e4a9caf5264fe7715566f2e5904b",
+        "src/sync/watcher.ts": "8d37bdc511692ab4d3ae2a22be1ea5ea5027e037df9a5125fe8ddbf98133803e"
+      },
+      "stages": [
+        {
+          "id": "start",
+          "title": "取得锁并调用协调器",
+          "description": "CodeGraph.sync 在互斥与文件锁内调用 ExtractionOrchestrator.sync，锁不可用返回零值统计。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.sync",
+              "definition_key": "4580f3bbc125d8f88f064e45a2f08d55ea74ada0d17b5f364c594b64c0e931b4",
+              "match": "this.fileLock.acquire();"
+            },
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.sync",
+              "definition_key": "4580f3bbc125d8f88f064e45a2f08d55ea74ada0d17b5f364c594b64c0e931b4",
+              "match": "const result = await this.orchestrator.sync(options.onProgress, options.paths);"
+            }
+          ],
+          "kind": "stage",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "scope",
+          "title": "确定检查范围",
+          "description": "给出非空精确路径时只协调这些路径；否则扫描目录并读取全部已跟踪文件。",
+          "anchors": [
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "if (scopedPaths && scopedPaths.length > 0) {"
+            },
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "currentFiles = await scanDirectoryAsync(this.rootDir);"
+            }
+          ],
+          "kind": "stage",
+          "boundary": "async",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "remove",
+          "title": "处理删除并恢复入向引用",
+          "description": "已跟踪文件不存在时，先把跨文件入向边恢复为待解析引用，再删除文件记录。",
+          "anchors": [
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "const incoming = this.queries.getCrossFileIncomingEdgesWithTarget(tracked.path);"
+            },
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "this.queries.deleteFile(tracked.path);"
+            }
+          ],
+          "kind": "stage",
+          "boundary": "state",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "changed",
+          "title": "用属性预过滤，再比较内容哈希",
+          "description": "已有文件大小和毫秒取整修改时间相同时跳过；其余可读取文件比较哈希以识别新增或修改。相同属性下的内容变化可能漏检。",
+          "anchors": [
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "if (stat.size === tracked.size && Math.floor(stat.mtimeMs) === Math.floor(tracked.modifiedAt)) {"
+            },
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "const contentHash = hashContent(content);"
+            }
+          ],
+          "kind": "stage",
+          "column": 0,
+          "row": 1
+        },
+        {
+          "id": "reindex",
+          "title": "只重建变化文件",
+          "description": "按需加载语言语法，逐个 indexFile 并统计定义集合差异，交给后续引用修复。",
+          "anchors": [
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "await loadGrammarsForLanguages(neededLanguages);"
+            },
+            {
+              "file": "src/extraction/index.ts",
+              "function": "ExtractionOrchestrator.sync",
+              "definition_key": "3385d4e1b1cf1bb036b414d1c6621f507393d94544500798b473f023307d126b",
+              "match": "const result = await this.indexFile(filePath);"
+            }
+          ],
+          "kind": "stage",
+          "boundary": "state",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "references",
+          "title": "修复变化文件和遗留引用",
+          "description": "新增或修改时执行相应解析；定义集合变化可重开旧解析边，孤立待解析项通过批量解析恢复。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.sync",
+              "definition_key": "4580f3bbc125d8f88f064e45a2f08d55ea74ada0d17b5f364c594b64c0e931b4",
+              "match": "if (result.definitionDelta && process.env.CODEGRAPH_NO_REBIND !== '1') {"
+            },
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.sync",
+              "definition_key": "4580f3bbc125d8f88f064e45a2f08d55ea74ada0d17b5f364c594b64c0e931b4",
+              "match": "const orphanCount = this.queries.getUnresolvedReferencesCount();"
+            }
+          ],
+          "kind": "stage",
+          "boundary": "state",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "result",
+          "title": "返回统计并释放锁",
+          "description": "按需要维护数据库并返回 SyncResult，finally 恢复检查点配置并释放文件锁。",
+          "anchors": [
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.sync",
+              "definition_key": "4580f3bbc125d8f88f064e45a2f08d55ea74ada0d17b5f364c594b64c0e931b4",
+              "match": "return result;"
+            },
+            {
+              "file": "src/index.ts",
+              "function": "CodeGraph.sync",
+              "definition_key": "4580f3bbc125d8f88f064e45a2f08d55ea74ada0d17b5f364c594b64c0e931b4",
+              "match": "this.fileLock.release();"
+            }
+          ],
+          "kind": "stage",
+          "outcome": "success",
+          "column": 0,
+          "row": 2
+        },
+        {
+          "id": "watch-failure",
+          "title": "自动同步失败后的条件恢复",
+          "description": "观察器失败保留待处理项；仅 pendingFiles 非空且未停止时安排下一轮。失败次数非零时退避，否则普通调度；降级停止后不再调度。",
+          "anchors": [
+            {
+              "file": "src/sync/watcher.ts",
+              "function": "FileWatcher.flush",
+              "definition_key": "6af15722612637e7769efd384e3c58422a3bf03ed65afb76a548751fc2106d76",
+              "match": "if (this.pendingFiles.size > 0 && !this.stopped) {"
+            },
+            {
+              "file": "src/sync/watcher.ts",
+              "function": "FileWatcher.flush",
+              "definition_key": "6af15722612637e7769efd384e3c58422a3bf03ed65afb76a548751fc2106d76",
+              "match": "const retryCount = Math.max(this.lockRetryCount, this.syncFailureRetryCount);"
+            },
+            {
+              "file": "src/sync/watcher.ts",
+              "function": "FileWatcher.flush",
+              "definition_key": "6af15722612637e7769efd384e3c58422a3bf03ed65afb76a548751fc2106d76",
+              "match": "this.scheduleRetrySync(retryDelayMs);"
+            }
+          ],
+          "kind": "stage",
+          "outcome": "failure",
+          "boundary": "async",
+          "column": 1,
+          "row": 2
+        }
+      ],
+      "edges": [
+        {
+          "id": "start>scope",
+          "from": "start",
+          "to": "scope",
+          "label": "取得锁后"
+        },
+        {
+          "id": "scope>remove",
+          "from": "scope",
+          "to": "remove",
+          "label": "协调记录"
+        },
+        {
+          "id": "remove>changed",
+          "from": "remove",
+          "to": "changed",
+          "label": "检查当前文件"
+        },
+        {
+          "id": "changed>reindex",
+          "from": "changed",
+          "to": "reindex",
+          "label": "变化文件非空时"
+        },
+        {
+          "id": "reindex>references",
+          "from": "reindex",
+          "to": "references",
+          "label": "抽取返回"
+        },
+        {
+          "id": "references>result",
+          "from": "references",
+          "to": "result",
+          "label": "编排完成"
+        },
+        {
+          "id": "start>watch-failure",
+          "from": "start",
+          "to": "watch-failure",
+          "label": "仅观察器回调的失败分支；其他调用方恢复未知"
+        }
+      ]
+    },
+    {
+      "id": "codegraph-context-dedup",
+      "title": "上下文去重与回指",
+      "purpose": "把本次拟发送的源码与会话已有内容比较，区分应发送的范围与可用回指替代的范围。",
+      "trigger": "ToolHandler.handleExplore 组织一次 explore 响应时处理每个候选文件。",
+      "input": "会话历史、当前文件内容及拟输出行范围；开关和输出预算共同约束。",
+      "output": "输出新源码、已发送内容的回指及会话记录；小残片可能折叠，不能保证每个新字符都返回。",
+      "boundary": "展示去重片段及渲染关键条件，检索排序和全部预算恢复路径不在此主线。指纹相等是代码条件，不是无碰撞数学证明。",
+      "source_digests": {
+        "src/mcp/explore-dedup.ts": "9b8c8a36c95a315780eded0d5d524dcac03e6606a7ff55c882aae7f8e73c42e2",
+        "src/mcp/tools.ts": "180d01079101e72ee5579c19443f962ac6f15e91c7faf3dd9cd39b7b5a460240"
+      },
+      "stages": [
+        {
+          "id": "enabled",
+          "title": "确认开关与会话历史",
+          "description": "仅开关启用且存在历史调用时启用历史去重。",
+          "anchors": [
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore",
+              "definition_key": "009935f6c93c7b87688c970f7cbdb3fafe11596720344f50482c2722ea47ae60",
+              "match": "const dedupEnabled = exploreDedupEnabled() && (priorCalls?.calls.length ?? 0) > 0;"
+            },
+            {
+              "file": "src/mcp/explore-dedup.ts",
+              "function": "exploreDedupEnabled",
+              "definition_key": "dc012b1e0a596374c1c4159662eb83d918a744634c9c207e6cef70a4acf09eab",
+              "match": "return !OFF.has(raw.trim().toLowerCase());"
+            }
+          ],
+          "kind": "stage",
+          "column": 0,
+          "row": 0
+        },
+        {
+          "id": "fingerprint",
+          "title": "计算当前内容指纹",
+          "description": "从当前 fileContent 计算长度与截断哈希，作为历史匹配条件；不依赖索引漂移标记。",
+          "anchors": [
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore",
+              "definition_key": "009935f6c93c7b87688c970f7cbdb3fafe11596720344f50482c2722ea47ae60",
+              "match": "const fingerprint = fileFingerprint(fileContent);"
+            },
+            {
+              "file": "src/mcp/explore-dedup.ts",
+              "function": "fileFingerprint",
+              "definition_key": "72c550cc3e2cef768cb16300f5efe94854d788efab2bc8533c9630d68473372e",
+              "match": "return `${content.length}:${createHash('sha1').update(content).digest('hex').slice(0, 16)}`;"
+            }
+          ],
+          "kind": "stage",
+          "column": 1,
+          "row": 0
+        },
+        {
+          "id": "history",
+          "title": "仅使用同路径同指纹的历史范围",
+          "description": "忽略其他文件及缺失或不同指纹的记录，合并有效历史行范围。",
+          "anchors": [
+            {
+              "file": "src/mcp/explore-dedup.ts",
+              "function": "servedRangesForFile",
+              "definition_key": "002eebb17f7bf309d28b491755ed7591e5fb246dde1b547556d18afd83cba4e6",
+              "match": "if (file.path !== filePath) continue;"
+            },
+            {
+              "file": "src/mcp/explore-dedup.ts",
+              "function": "servedRangesForFile",
+              "definition_key": "002eebb17f7bf309d28b491755ed7591e5fb246dde1b547556d18afd83cba4e6",
+              "match": "if (!file.fingerprint || file.fingerprint !== fingerprint) continue;"
+            }
+          ],
+          "kind": "stage",
+          "column": 2,
+          "row": 0
+        },
+        {
+          "id": "ranges",
+          "title": "保留未达到覆盖阈值的行",
+          "description": "求交集，仅移除达到 minCovered 阈值的连续覆盖段；没有合格覆盖时保留原范围。默认阈值来自文件常量。",
+          "anchors": [
+            {
+              "file": "src/mcp/explore-dedup.ts",
+              "function": "dedupeRange",
+              "definition_key": "c11020624b08d3a0de7c5266493bdb67ed9696067417313bc39157fc84945dce",
+              "match": "const covered = intersectRange(range, served).filter((r) => r.end - r.start + 1 >= minCovered);"
+            },
+            {
+              "file": "src/mcp/explore-dedup.ts",
+              "function": "dedupeRange",
+              "definition_key": "c11020624b08d3a0de7c5266493bdb67ed9696067417313bc39157fc84945dce",
+              "match": "return { emit: subtractRange(range, covered), covered };"
+            }
+          ],
+          "kind": "stage",
+          "column": 0,
+          "row": 1
+        },
+        {
+          "id": "render",
+          "title": "按剩余行重建正文",
+          "description": "遍历每个拟输出片段；未覆盖的原样保留，其余仅重建 split.emit 中的范围。",
+          "anchors": [
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore.dedupeSpans",
+              "definition_key": "b7219321455a24269b795a61c01c35b0b9c6a2ef6cf29ffbb7b9d589c1f87c0b",
+              "match": "const split = dedupeRange(part.range, served);"
+            },
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore.dedupeSpans",
+              "definition_key": "b7219321455a24269b795a61c01c35b0b9c6a2ef6cf29ffbb7b9d589c1f87c0b",
+              "match": "for (const r of split.emit) kept.push({ range: r, text: renderSpan(r) });"
+            }
+          ],
+          "kind": "stage",
+          "column": 1,
+          "row": 1
+        },
+        {
+          "id": "small-remainder",
+          "title": "折叠过小的新内容残片",
+          "description": "已有覆盖且剩余正文短于 MIN_DELTA_CHARS 时不输出残片正文，并清空该残片的新增 ranges；不是所有未发送内容都会输出。",
+          "anchors": [
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore.emitFileSection",
+              "definition_key": "934901fc4b6ce178cfdd61a457c69559fbaab491c001d8e0d5c2a5b6c4519caa",
+              "match": "const folded = opts.covered.length > 0 && opts.body.length < EXPLORE_DEDUP.MIN_DELTA_CHARS;"
+            },
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore.emitFileSection",
+              "definition_key": "934901fc4b6ce178cfdd61a457c69559fbaab491c001d8e0d5c2a5b6c4519caa",
+              "match": "const ranges = folded ? [] : opts.ranges;"
+            }
+          ],
+          "kind": "stage",
+          "column": 2,
+          "row": 1
+        },
+        {
+          "id": "emit",
+          "title": "输出回指并记录实际持有范围",
+          "description": "已覆盖范围产生回指；有正文时发送代码并记录，新正文为空时仅记录覆盖范围。",
+          "anchors": [
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore.emitFileSection",
+              "definition_key": "934901fc4b6ce178cfdd61a457c69559fbaab491c001d8e0d5c2a5b6c4519caa",
+              "match": "const pointer = formatBackReference("
+            },
+            {
+              "file": "src/mcp/tools.ts",
+              "function": "ToolHandler.handleExplore.emitFileSection",
+              "definition_key": "934901fc4b6ce178cfdd61a457c69559fbaab491c001d8e0d5c2a5b6c4519caa",
+              "match": "noteEmitted(filePath, opts.covered, 0, fingerprint);"
+            }
+          ],
+          "kind": "stage",
+          "outcome": "success",
+          "boundary": "state",
+          "column": 0,
+          "row": 2
+        }
+      ],
+      "edges": [
+        {
+          "id": "enabled>fingerprint",
+          "from": "enabled",
+          "to": "fingerprint",
+          "label": "满足前述条件时继续"
+        },
+        {
+          "id": "fingerprint>history",
+          "from": "fingerprint",
+          "to": "history",
+          "label": "满足前述条件时继续"
+        },
+        {
+          "id": "history>ranges",
+          "from": "history",
+          "to": "ranges",
+          "label": "满足前述条件时继续"
+        },
+        {
+          "id": "ranges>render",
+          "from": "ranges",
+          "to": "render",
+          "label": "满足前述条件时继续"
+        },
+        {
+          "id": "render>small-remainder",
+          "from": "render",
+          "to": "small-remainder",
+          "label": "满足前述条件时继续"
+        },
+        {
+          "id": "small-remainder>emit",
+          "from": "small-remainder",
+          "to": "emit",
+          "label": "满足前述条件时继续"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "R01",
+      "text": "历史去重仅在开关启用且存在历史调用时生效。",
+      "condition": "开关为真，且 priorCalls.calls.length > 0。",
+      "mainline": "codegraph-context-dedup",
+      "stage": "enabled",
+      "definition_keys": [
+        "009935f6c93c7b87688c970f7cbdb3fafe11596720344f50482c2722ea47ae60"
+      ],
+      "evidence_ids": [
+        "9b8cd888aa2dfc7bde2a5624d8d87247da53488cc346a9897c6b869f101adc94"
+      ],
+      "source": "冻结源码的独立条款整理，不是外部业务规格。",
+      "anchors": [
+        {
+          "file": "src/mcp/tools.ts",
+          "function": "ToolHandler.handleExplore",
+          "definition_key": "009935f6c93c7b87688c970f7cbdb3fafe11596720344f50482c2722ea47ae60",
+          "match": "const dedupEnabled = exploreDedupEnabled() && (priorCalls?.calls.length ?? 0) > 0;"
+        },
+        {
+          "file": "src/mcp/explore-dedup.ts",
+          "function": "exploreDedupEnabled",
+          "definition_key": "dc012b1e0a596374c1c4159662eb83d918a744634c9c207e6cef70a4acf09eab",
+          "match": "return !OFF.has(raw.trim().toLowerCase());"
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "text": "仅同路径且指纹存在并与当前相同的历史范围参与去重。",
+      "condition": "路径相同；历史指纹非空且等于当前指纹。",
+      "mainline": "codegraph-context-dedup",
+      "stage": "history",
+      "definition_keys": [
+        "002eebb17f7bf309d28b491755ed7591e5fb246dde1b547556d18afd83cba4e6"
+      ],
+      "evidence_ids": [
+        "eae6f41dc067edf2fa22f91c7fe6c108c4e21c11b3af1dee21db5e477f30ea47"
+      ],
+      "source": "冻结源码的独立条款整理，不是外部业务规格。",
+      "anchors": [
+        {
+          "file": "src/mcp/explore-dedup.ts",
+          "function": "servedRangesForFile",
+          "definition_key": "002eebb17f7bf309d28b491755ed7591e5fb246dde1b547556d18afd83cba4e6",
+          "match": "if (file.path !== filePath) continue;"
+        },
+        {
+          "file": "src/mcp/explore-dedup.ts",
+          "function": "servedRangesForFile",
+          "definition_key": "002eebb17f7bf309d28b491755ed7591e5fb246dde1b547556d18afd83cba4e6",
+          "match": "if (!file.fingerprint || file.fingerprint !== fingerprint) continue;"
+        }
+      ]
+    },
+    {
+      "id": "R03",
+      "text": "仅达到 minCovered 阈值的连续覆盖段可以从拟发送范围扣除。",
+      "condition": "覆盖段长度大于等于 minCovered；无合格覆盖则保留原范围。",
+      "mainline": "codegraph-context-dedup",
+      "stage": "ranges",
+      "definition_keys": [
+        "c11020624b08d3a0de7c5266493bdb67ed9696067417313bc39157fc84945dce"
+      ],
+      "evidence_ids": [
+        "54db9ab8d90558ce7f66b938b147be12fcb465de1d46710438a69bb399854271"
+      ],
+      "source": "冻结源码的独立条款整理，不是外部业务规格。",
+      "anchors": [
+        {
+          "file": "src/mcp/explore-dedup.ts",
+          "function": "dedupeRange",
+          "definition_key": "c11020624b08d3a0de7c5266493bdb67ed9696067417313bc39157fc84945dce",
+          "match": "const covered = intersectRange(range, served).filter((r) => r.end - r.start + 1 >= minCovered);"
+        },
+        {
+          "file": "src/mcp/explore-dedup.ts",
+          "function": "dedupeRange",
+          "definition_key": "c11020624b08d3a0de7c5266493bdb67ed9696067417313bc39157fc84945dce",
+          "match": "return { emit: subtractRange(range, covered), covered };"
+        }
+      ]
+    },
+    {
+      "id": "R04",
+      "text": "范围扣除结果决定新正文，已覆盖部分提供会话回指。",
+      "condition": "split.emit 重建正文；存在 covered 时生成回指。",
+      "mainline": "codegraph-context-dedup",
+      "stage": "render",
+      "definition_keys": [
+        "b7219321455a24269b795a61c01c35b0b9c6a2ef6cf29ffbb7b9d589c1f87c0b"
+      ],
+      "evidence_ids": [
+        "fe72f538efc8684811c5550a8dee219b4c350c6c3c49ce7d3d20d46536588e2a",
+        "ce5bfc45240405b1897f948d8d170bcbef5059508d828fdad6763b1fb218802e"
+      ],
+      "source": "冻结源码的独立条款整理，不是外部业务规格。",
+      "anchors": [
+        {
+          "file": "src/mcp/tools.ts",
+          "function": "ToolHandler.handleExplore.dedupeSpans",
+          "definition_key": "b7219321455a24269b795a61c01c35b0b9c6a2ef6cf29ffbb7b9d589c1f87c0b",
+          "match": "const split = dedupeRange(part.range, served);"
+        },
+        {
+          "file": "src/mcp/tools.ts",
+          "function": "ToolHandler.handleExplore.dedupeSpans",
+          "definition_key": "b7219321455a24269b795a61c01c35b0b9c6a2ef6cf29ffbb7b9d589c1f87c0b",
+          "match": "for (const r of split.emit) kept.push({ range: r, text: renderSpan(r) });"
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "text": "有覆盖且剩余正文低于阈值时折叠新残片，不把未输出新范围记入历史。",
+      "condition": "covered 非空且 body.length < MIN_DELTA_CHARS；folded 时 ranges=[]。",
+      "mainline": "codegraph-context-dedup",
+      "stage": "small-remainder",
+      "definition_keys": [
+        "934901fc4b6ce178cfdd61a457c69559fbaab491c001d8e0d5c2a5b6c4519caa"
+      ],
+      "evidence_ids": [
+        "ce5bfc45240405b1897f948d8d170bcbef5059508d828fdad6763b1fb218802e"
+      ],
+      "source": "冻结源码的独立条款整理，不是外部业务规格。",
+      "anchors": [
+        {
+          "file": "src/mcp/tools.ts",
+          "function": "ToolHandler.handleExplore.emitFileSection",
+          "definition_key": "934901fc4b6ce178cfdd61a457c69559fbaab491c001d8e0d5c2a5b6c4519caa",
+          "match": "const folded = opts.covered.length > 0 && opts.body.length < EXPLORE_DEDUP.MIN_DELTA_CHARS;"
+        },
+        {
+          "file": "src/mcp/tools.ts",
+          "function": "ToolHandler.handleExplore.emitFileSection",
+          "definition_key": "934901fc4b6ce178cfdd61a457c69559fbaab491c001d8e0d5c2a5b6c4519caa",
+          "match": "const ranges = folded ? [] : opts.ranges;"
+        }
+      ]
+    }
+  ],
+  "aliases": [
+    {
+      "text": "索引",
+      "type": "mainline",
+      "key": "codegraph-index"
+    },
+    {
+      "text": "建立索引",
+      "type": "mainline",
+      "key": "codegraph-index"
+    },
+    {
+      "text": "项目入口",
+      "type": "mainline",
+      "key": "codegraph-index"
+    },
+    {
+      "text": "增量同步",
+      "type": "mainline",
+      "key": "codegraph-sync"
+    },
+    {
+      "text": "同步",
+      "type": "mainline",
+      "key": "codegraph-sync"
+    },
+    {
+      "text": "源码变化",
+      "type": "mainline",
+      "key": "codegraph-sync"
+    },
+    {
+      "text": "上下文去重",
+      "type": "mainline",
+      "key": "codegraph-context-dedup"
+    },
+    {
+      "text": "重复上下文",
+      "type": "mainline",
+      "key": "codegraph-context-dedup"
+    },
+    {
+      "text": "避免重复发送",
+      "type": "mainline",
+      "key": "codegraph-context-dedup"
+    }
+  ],
+  "corrections": [
+    {
+      "definition_key": "6af15722612637e7769efd384e3c58422a3bf03ed65afb76a548751fc2106d76",
+      "content_hash": "0297b3ef6d65b086441f8eee1edb84e83c33a092230fe2e74190f94ee8930d3a",
+      "reason": "独立核对 finally，补充 pendingFiles 非空且未停止的调度前提。",
+      "logic": "若已在同步或观察器已停止则返回。否则根据待处理文件、完整扫描标记与数量上限选择路径，调用并等待 syncFn。成功时重置失败计数，只移除同步开始前已覆盖事件，再调用完成回调；失败时区分锁竞争与一般错误并保留待处理项，超出预算则降级停止。finally 清除 syncing；只有 pendingFiles 非空且观察器未停止时才安排下一轮。两种失败计数的较大值非零时采用有上限的指数退避，否则使用普通调度。没有待处理文件或已经停止时，此 finally 不安排重试。"
+    }
+  ]
+}

@@ -327,3 +327,49 @@ select { font: inherit; color: inherit; border: 1px solid var(--line); border-ra
 .flow-paths { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
 .flow-paths button { font-size: 12px; }
 .flow-paths button[aria-pressed=true] { color: var(--accent); background: var(--selected); }
+
+/* Project purpose and a short, ordered reading route. */
+.project-overview { max-width: 76ch; }
+.project-overview h2 { margin-top: 2rem; }
+.reading-route { padding-left: 1.5rem; }
+.reading-route li { padding: .5rem 0 1.4rem .4rem; border-bottom: 1px solid var(--border, #d8dfdb); }
+.reading-route li + li { margin-top: 1rem; }
+.reading-route h3 { margin: .2rem 0 .55rem; }
+.source-status { color: #365747; font-size: .875rem; }
+#global-results button > span { display: block; font-size: .875rem; margin-top: .3rem; white-space: normal; }
+
+.requirements-workbench { max-width: 100%; }
+.requirement-actions { display: flex; flex-wrap: wrap; align-items: start; gap: .75rem; margin: 1.5rem 0; }
+.upload-control { display: grid; gap: .4rem; max-width: 16rem; }
+.upload-control input { width: 100%; }
+.requirement-table-wrap { overflow-x: auto; margin: 1.5rem 0; }
+.requirement-table { border-collapse: collapse; width: 100%; text-align: left; }
+.requirement-table th, .requirement-table td { padding: .8rem; border-bottom: 1px solid #d8dfdb; vertical-align: top; }
+.requirement-table th { color: #365747; font-size: .875rem; }
+.requirement-table tr[aria-selected="true"] { background: #edf4ef; }
+.requirement-table td:first-child { min-width: 15rem; }
+.requirement-detail { max-width: 78ch; padding-top: 1rem; }
+.requirement-record { padding: .8rem 0 1.25rem; border-bottom: 1px solid #d8dfdb; }
+.requirement-record pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.requirement-editor { margin: 2rem 0; }
+.requirement-editor form { display: grid; gap: 1rem; margin-top: 1rem; }
+.requirement-editor label { display: grid; gap: .4rem; }
+.requirement-editor textarea { min-height: 5rem; resize: vertical; font: inherit; padding: .65rem; }
+.requirement-editor select { width: 100%; min-width: 0; }
+.requirement-error { color: #8d2e26; }
+
+#reader-load-state { position: fixed; z-index: 100; top: 66px; left: 50%; transform: translateX(-50%); max-width: 80vw; padding: 12px 18px; background: #fffdf4; border: 1px solid #b4bd9d; border-radius: 8px; box-shadow: 0 4px 18px #23332624; }
+#reader-load-state button { margin-left: 12px; }
+.behavior-steps details { margin-top: 10px; }
+
+.behavior-steps { max-width: 960px; }
+.behavior-steps > ol { list-style: none; padding: 0; margin: 22px 0; }
+.behavior-steps > ol > li { border-top: 1px solid var(--line); padding: 18px 0 22px; scroll-margin-top: 100px; }
+.behavior-steps li > header { display: flex; align-items: center; gap: 12px; }
+.behavior-steps li > header > span { color: var(--accent); font-variant-numeric: tabular-nums; }
+.behavior-steps li h2 { flex: 1; margin: 0; font-size: 17px; }
+.behavior-steps li > p { margin: 10px 0; color: var(--muted); }
+.behavior-excerpt { display: block; padding: 10px 12px; background: var(--selected); white-space: normal; overflow-wrap: anywhere; }
+.behavior-steps nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.behavior-steps nav button { padding: 5px 8px; font-size: 12px; }
+.behavior-steps pre { white-space: pre-wrap; overflow-wrap: anywhere; }

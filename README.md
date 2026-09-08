@@ -179,3 +179,5 @@ node dist/cli/main.js trace run --repo /path/to/repository --store /path/to/stor
 ## 通用源码分组阅读
 
 冻结阅读包可通过同一离线入口生成、读取和重生成结构模块与职责建议，无需仓库专用映射；用法与预算边界见 [通用分组](docs/reader-grouping.md)。
+
+项目总览、中文职责搜索、候选主线及逐条需求核对的离线分包入口见 [项目理解与需求核对阅读包](docs/guides/project-understanding-reader.md)。
