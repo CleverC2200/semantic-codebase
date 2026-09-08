@@ -183,12 +183,12 @@
     const linked = activeMembers(), activeFiles = new Set([...linked].map(k => defs.get(k)?.file_path));
     const root = {};
     for (const file of D.files) {
-      let node = root; const parts = file.path.replace('packages/zod/src/v3/', '').split('/');
+      let node = root; const parts = (D.sourceRoot && file.path.startsWith(D.sourceRoot + '/') ? file.path.slice(D.sourceRoot.length + 1) : file.path).split('/');
       parts.forEach((part, i) => { node[part] ??= { children: {}, file: null }; if (i === parts.length - 1) node[part].file = file; node = node[part].children; });
     }
-    function items(node, parent = 'packages/zod/src/v3') {
+    function items(node, parent = D.sourceRoot ?? '') {
       return Object.entries(node).sort(([a, x], [b, y]) => Number(Boolean(x.file)) - Number(Boolean(y.file)) || a.localeCompare(b)).map(([name, item]) => {
-        const path = parent + '/' + name;
+        const path = item.file?.path ?? (parent ? parent + '/' + name : name);
         if (!item.file) return `<details class="directory" data-dir="${E(path)}" ${expanded.has(path) ? 'open' : ''}><summary><span class="tree-icon folder-icon" aria-hidden="true"></span>${E(name)}</summary><div class="directory-children">${items(item.children, path)}</div></details>`;
         const fns = functions.filter(d => d.file_path === path), selected = S.context === 'file' && S.file === path;
         const fileButton = `<button class="file-button ${selected ? 'selected' : ''}" data-file="${E(path)}" aria-current="${selected ? 'page' : 'false'}">${fileIcon(name)}<span>${E(name)}</span>${activeFiles.has(path) ? '<span class="route-dot" aria-label="相关文件"></span>' : ''}</button>`;
