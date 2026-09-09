@@ -58,7 +58,7 @@ for (const file of files) if (sha256Bytes(readFileSync(path.join(repo,file.relat
 mkdirSync(output,{recursive:true,mode:0o700});
 const store = new SqliteSnapshotStore(path.join(output,'preview.sqlite'));
 try { store.beginBuild(state.repository_id,state.snapshot_id);store.publishReady(state);store.publishSemanticOverlay(overlay); } finally { store.close(); }
-const input={overlay,reader,receipt,definitionsByKey:new Map(state.graph.definitions.map(d=>[d.definition_key,d])),sourceFiles:files,manifest:state.manifest,structuralGraph:state.graph};
+const input={overlay,reader,receipt,revision:receipt.source_head ?? null,definitionsByKey:new Map(state.graph.definitions.map(d=>[d.definition_key,d])),sourceFiles:files,manifest:state.manifest,structuralGraph:state.graph};
 for (const [name,value] of Object.entries({'receipt.json':receipt,'semantic-overlay.json':overlay,'reader-data.json':buildReaderData(input),'presentation.json':reader})) writeFileSync(path.join(output,name),JSON.stringify(value,null,2)+'\n');
 writeFileSync(path.join(output,'acceptance.html'),renderSemanticPreview(input));
 console.log(JSON.stringify({output,...receipt.counts,coverage:overlay.coverage.status,analysis_ms:receipt.analysis_ms}));

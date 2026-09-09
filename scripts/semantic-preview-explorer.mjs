@@ -9,7 +9,7 @@ import { pythonCallableSignature } from "./semantic-reader-python-signature.mjs"
 const capabilityCandidates = JSON.parse(readFileSync(new URL("./semantic-reader-capabilities.json", import.meta.url), "utf8"));
 const explanations = JSON.parse(readFileSync(new URL("./semantic-reader-explanations.json", import.meta.url), "utf8"));
 
-export function buildReaderData({overlay, definitionsByKey, sourceFiles = [], manifest, structuralGraph, runtime, reader = {}}) {
+export function buildReaderData({overlay, definitionsByKey, sourceFiles = [], manifest, structuralGraph, runtime, reader = {}, revision = null}) {
   const allEvidence = [...new Map([...(structuralGraph?.evidence ?? []), ...overlay.evidence].map(e => [e.evidence_id, e])).values()];
   const sources = new Map(sourceFiles.map(f => [f.relative_path, {bytes:f.source_bytes, digest:createHash('sha256').update(f.source_bytes).digest('hex')}]));
   const files = (manifest?.files ?? [...new Map(overlay.evidence.map(e=>[e.file_path,{relative_path:e.file_path,source_digest:e.source_digest}])).values()]).map(f=>{
@@ -34,14 +34,14 @@ export function buildReaderData({overlay, definitionsByKey, sourceFiles = [], ma
     const source=sources.get(e.file_path);const valid=source?.digest===e.source_digest&&e.span.start_byte>=0&&e.span.end_byte<=source.bytes.length;
     return [e.evidence_id,{...e,line:valid?source.bytes.subarray(0,e.span.start_byte).toString('utf8').split('\n').length:null}];
   }));
-  const data={schema:"reader-snapshot-v1",files,definitions,facts,evidence,repository:overlay.repository_id ?? "local",snapshot:overlay.snapshot_id,overlayHash:overlay.overlay_hash,relations:(structuralGraph?.relations ?? []).filter(r => r.kind === "INHERITS"),relationCoverage:structuralGraph?.coverage ?? {status:"unknown"},coverage:overlay.coverage,capabilityCandidates:reader.capabilities ?? capabilityCandidates,project:reader.project ?? "Zod / v3",sourceRoot:reader.sourceRoot ?? "packages/zod/src/v3",initialFile:reader.initialFile,overview:reader.overview,searchAliases:reader.searchAliases};
+  const data={schema:"reader-snapshot-v1",files,definitions,facts,evidence,repository:overlay.repository_id ?? "local",revision,snapshot:overlay.snapshot_id,overlayHash:overlay.overlay_hash,relations:(structuralGraph?.relations ?? []).filter(r => r.kind === "INHERITS"),relationCoverage:structuralGraph?.coverage ?? {status:"unknown"},coverage:overlay.coverage,capabilityCandidates:reader.capabilities ?? capabilityCandidates,project:reader.project ?? "Zod / v3",sourceRoot:reader.sourceRoot ?? "packages/zod/src/v3",initialFile:reader.initialFile,overview:reader.overview,searchAliases:reader.searchAliases};
   const { observation_set_hash, ...runtimeBody } = runtime ?? {};
   const runtimeValid = Boolean(runtime && runtime.repository_id === data.repository && runtime.snapshot_id === data.snapshot && runtime.semantic_overlay_hash === data.overlayHash && createHash('sha256').update(canonicalJson(runtimeBody)).digest('hex') === observation_set_hash);
   return {...data, groupingRelations:(structuralGraph?.relations ?? []).filter(r=>r.kind==='IMPORTS'), runtime: runtime ?? null, runtimeBinding: { valid: runtimeValid, reason: runtimeValid ? null : 'runtime_hash_or_version_mismatch' }, mainlines:bindReaderMainlines(data, reader.mainlines)};
 }
 
 export function renderSemanticPreview(input) {
-  const model=buildReaderData(input);
+  const model=buildReaderData({ ...input, revision: input.revision ?? input.receipt?.source_head ?? null });
   return renderReaderData(model, input.receipt, input.reader ? null : renderDiagnosticHtml(input));
 }
 
@@ -50,7 +50,7 @@ export function renderReaderData(model, receipt, diagnosticHtml = null) {
   const E=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
   const data=JSON.stringify(model).replaceAll('<','\\u003c').replaceAll('\u2028','\\u2028').replaceAll('\u2029','\\u2029');
   const css=readFileSync(new URL('./semantic-reader.css',import.meta.url),'utf8');
-  const js = ['semantic-reader-query.mjs', 'semantic-reader-guide.mjs', 'semantic-reader-comparison.mjs', 'semantic-reader-requirements.mjs', 'semantic-reader-requirements-ui.mjs', 'semantic-reader-loader.mjs', 'semantic-reader-risk.mjs', 'semantic-reader-capabilities.mjs', 'semantic-reader-graph.mjs', 'semantic-reader-behavior.mjs', 'semantic-reader-client.js']
+  const js = ['semantic-reader-query.mjs', 'semantic-reader-archify.mjs', 'semantic-reader-guide.mjs', 'semantic-reader-comparison.mjs', 'semantic-reader-requirements.mjs', 'semantic-reader-requirements-ui.mjs', 'semantic-reader-loader.mjs', 'semantic-reader-risk.mjs', 'semantic-reader-capabilities.mjs', 'semantic-reader-graph.mjs', 'semantic-reader-behavior.mjs', 'semantic-reader-client.js']
     .map(name => readFileSync(new URL('./' + name, import.meta.url), 'utf8').replace(/^import .+ from ['"].+['"];?\n/gm, '').replace(/^export /gm, '')).join('\n');
   const legacy=(diagnosticHtml ?? `<main class="wrap"><h1>${E(model.project)} 本地分析记录</h1><p>仅静态分析；未执行应用，未调用在线模型。解释为待核验推断。</p><pre>${E(JSON.stringify(receipt,null,2))}</pre></main>`).match(/<main class="wrap">([\s\S]*)<\/main>/)?.[1]??'';
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${E(model.project)} · 源码阅读工作台</title><style>${css}</style></head><body>

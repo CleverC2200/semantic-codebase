@@ -39,3 +39,16 @@ python3 -m http.server 8773 --bind 127.0.0.1 --directory .workspace/acceptance
 分片降低首屏载荷，但含关联 Evidence 的函数分片会增加总包体积。Coverage 和 unknown 沿用原包；恢复完整 Fact 只证明传输与原派生结果一致，不证明原抽取绝对正确。
 
 `#94` 的新读者验收必须另行记录真人参与、时间和误解。自动点击、模型复核及搜索用例都不能替代真人阅读，也不能证明被索引应用的真实运行。
+
+
+### Archify 展示投影
+
+在主线阅读页选择“导出 Archify 图规格”可下载当前 Snapshot 的证据边界规格。规格只包含当前版本已绑定的 Definition、SourceFile、已解析 Relation 和来源摘要；unknown、partial、未解析候选和运行观测边界会保留为说明，不会被补画成确定关系。
+
+在项目根目录使用项目级 Archify 渲染自包含 HTML：
+
+```bash
+node scripts/render-reader-archify.mjs /absolute/path/to/spec.json /absolute/path/to/reader-archify.html
+```
+
+渲染前必须存在真实 Git revision；命令运行 Archify `showcase` 校验并拒绝没有版本绑定的规格。HTML 交付、浏览器检查和人工视觉检查是三个独立证据层，不能互相替代。
