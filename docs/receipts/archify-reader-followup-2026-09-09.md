@@ -30,3 +30,13 @@ grammar 后续由 `0.23.2-scb.1` 更新为 `0.23.2-scb.2`（`931b51e`），其�
 - 完整 #99 路径/运行观测分层、#100 关系 Evidence 面板与版本失配旅程、#102 全范围多尺寸/无障碍验收仍需后续工作。本轮不自动关闭这些票。
 
 最终两列候选的 deterministic showcase 为 9/9，但 visual-check 检测到桌面纵向溢出：1440×900 的 scrollHeight=1222，1600×1000 / 1920×1080 为 1348，2048×1320 为 1376。此视觉状态为 failed，不使用上一候选的机器通过记录代替。#102 保持未完成。投影/交付当前定向测试 25/25 通过；来源 CLI 回归另外 2/2 通过。
+
+## 最终提交验证
+
+实现提交 `490ef24`，评审修复提交 `4f99dc5`。在 `4f99dc5` 的独立 Git 归档副本中构建后，完整测试 **299/299 通过、0 skipped**，typecheck 与 build 通过。首次未构建的归档测试因缺少 dist 失败；完成归档内构建后重跑，通过记录为 `.scratch/archify-followup/full-test-built-final.log`。没有用原脏工作区测试替代已提交代码的验证。
+
+- Standards 独立评审发现显式输出保护在删除之后；已将保护前移到路径解析后，并限制清理只作用于默认输出。实际 CLI 对已有临时目录返回错误，目录中的 sentinel 字节保持不变。复核无阻断；Evidence 引用遍历重复为非阻断维护建议。
+- Spec 独立评审发现隔离暂存时，两处浏览器接线落在错误的异常分支；已修正提交，使动作分发在 document click、iframe 接线在 mainline render，复核无剩余 Spec 发现。
+- 最终归档副本的本机服务已重新执行浏览器验收：直接进入可用主线，生成最终两列 Archify 图，点击 canonicalHash，核对 src/contract/hash.ts L48–50 的实际冻结源码，返回原主线仍保留 Definition、Snapshot、revision 和 Evidence。此次图 HTML 的 SHA-256 为 `155f2630b3bab580bd17fe6a54052a297b0bf31f0e9058cc748d3c5d03365afd`。此浏览器记录不改变交付时收据中的 not_run，也不把已知的 visual-check failed 改为 passed。
+
+本轮只提交已授权实现及验证记录；已有未提交工作继续保留。未推送、未创建 PR、未关闭后续票。
