@@ -1,8 +1,8 @@
 {
   "zod": {
-    "snapshot_id": "d5a74486b5fd2fc6c8951d258baffaf3c38a26214d215f54b1deddc20acbbdd6",
-    "overlay_hash": "1f052dba5232d65888e8e4e221440047a3f24e3766166f62007791ab33c51ab6",
-    "semantic_facts": 4330,
+    "snapshot_id": "9eb4e23f495b2b1afea00259168952f7ff5ff0b2c951bdbb1c87b5b27d868481",
+    "overlay_hash": "adb07a325a460043ee4b163049bafdff196703a4b9961571270a9e8692bfeeaf",
+    "semantic_facts": 4332,
     "facts_by_kind": {
       "application_flow": 297,
       "call_data_flow": 999,
@@ -12,7 +12,7 @@
       "data_flow": 233,
       "effect": 373,
       "entrypoint": 297,
-      "symbol_type": 431
+      "symbol_type": 433
     }
   },
   "python": {
@@ -33,12 +33,12 @@
     }
   },
   "runtime": {
-    "observation_set_hash": "71da52a792f7ed6265ccbcc9005369670b6f727a170bbf4fe971db17a2ef6e54",
+    "observation_set_hash": "6b48675d8f2d3816d1754a8fdaabae03954e16c60f21dde6c2b83571df78bd10",
     "observations": 2,
     "candidates": 1
   },
   "context": {
     "intent": "call_path",
-    "facts": 46
+    "facts": 42
   }
 }

@@ -43,12 +43,28 @@ python3 -m http.server 8773 --bind 127.0.0.1 --directory .workspace/acceptance
 
 ### Archify 展示投影
 
-在主线阅读页选择“导出 Archify 图规格”可下载当前 Snapshot 的证据边界规格。规格只包含当前版本已绑定的 Definition、SourceFile、已解析 Relation 和来源摘要；unknown、partial、未解析候选和运行观测边界会保留为说明，不会被补画成确定关系。
+使用完整冻结阅读包和对应源码 Git 根目录启动本机阅读入口：
 
-在项目根目录使用项目级 Archify 渲染自包含 HTML：
-
-```bash
-node scripts/render-reader-archify.mjs /absolute/path/to/spec.json /absolute/path/to/reader-archify.html
+```sh
+node scripts/serve-reader-archify.mjs /absolute/path/to/reader-data.json /absolute/path/to/source-repository
 ```
 
-渲染前必须存在真实 Git revision；命令运行 Archify `showcase` 校验并拒绝没有版本绑定的规格。HTML 交付、浏览器检查和人工视觉检查是三个独立证据层，不能互相替代。
+打开命令输出的本机 URL，在主线页选择“预览 Archify 图”。核对节点数、关系数、边界项、Coverage、Snapshot 和 revision 后，可下载 Archify JSON、投影证据、离线 HTML 与交付收据。选择图节点或关系按需核对 Evidence、Claim Basis、Coverage 和源码，再回到 Reader 中的正确定义；返回主线保留选中对象与阶段。普通离线 Reader 可准备并导出 JSON，HTML 生成需要上述本机入口或以下命令。
+
+可选择全部路径、已有正常／失败结果标签对应的候选路径或单个阶段；这些阶段与路径仍为 `llm_inferred`、未验证。缺少结果标签时对应按钮不可用。Runtime Observation 单独展示，需通过 Repository、Snapshot、Overlay、Execution 与 observation-set 摘要校验；函数观测不证明阶段或整条路径执行。版本失配会停止来源加载并保留上次核对的详情。
+
+桌面支持明暗主题；窄屏图面可以横向滚动或用左右方向键移动，并有可直接操作的节点／关系来源目录。单图预算为 12 个定义，超限明确拒绝，尚不支持自动拆分大型主线。四类下载使用包含主线身份的输入摘要隔离，即使不同主线生成相同 HTML，也不会覆盖彼此的证明或收据。
+
+命令行交付到一个新目录：
+
+```sh
+node scripts/render-reader-archify.mjs /absolute/path/to/reader-data.json MAINLINE_ID /absolute/path/to/new-delivery /absolute/path/to/source-repository
+```
+
+目录内的 diagram.html 是自包含展示，diagram.archify.json 可直接交给项目级 Archify；projection.json 保留 Definition 身份、完整 Evidence 和 unknown，receipt.json 绑定输入、版本、工具与输出摘要。旧版“单独传 spec.json”的包装命令不再支持：只有 Archify 规格不能证明 Semantic Evidence Closure。
+
+生成器核对源文件摘要与指定 Git revision，不以当前 HEAD 替代旧版本。旧阅读包可使用旁边的 receipt.json 恢复来源身份，但 Snapshot、Overlay 与完整文件清单必须吻合；目录样本缺少真实 revision 时不能导出来源已核对的 Archify 图。
+
+本轮最多展示 12 个绑定节点，超出预算会明确拒绝，要求更小的来源绑定主线。未解析、候选、partial 与运行观测不补画为确定连线；阶段始终标记为未验证推断。生成失败不覆盖任何已交付目录。服务只监听 127.0.0.1，只处理固定包内主线 ID；不执行被索引应用、不调用模型，也不接收任意源码或命令。结束预览可用 Ctrl-C 停止服务。
+
+HTML 交付、自动浏览器检查和视觉检查是三份独立证据，不能互相替代；具体结果与限制见 [本轮收据](../receipts/archify-reader-followup-2026-09-09.md)。
