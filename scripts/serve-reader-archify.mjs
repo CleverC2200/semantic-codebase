@@ -22,14 +22,17 @@ export async function serveReaderArchify(input, sourceRoot, { port = 0, outputDi
   let origin;
   const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'self'; frame-src 'self' blob:; base-uri 'none'; form-action 'none'";
   const server = createServer(async (req, res) => {
-    const send = (status, content, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Security-Policy': csp, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }); res.end(content); };
+    const send = (status, content, type = 'application/json; charset=utf-8', headers = {}) => { res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Security-Policy': csp, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', ...headers }); res.end(content); };
     try {
       if (req.headers.host !== new URL(origin).host || (req.headers.origin && req.headers.origin !== origin)) return send(403, JSON.stringify({ error: '只接受当前本机阅读页。' }));
       const url = new URL(req.url, origin);
       if (req.method === 'GET') {
         if (url.pathname === '/') return send(200, page, 'text/html; charset=utf-8');
         if (assets.has(url.pathname)) return send(200, assets.get(url.pathname));
-        if (artifacts.has(url.pathname)) return send(200, artifacts.get(url.pathname), 'text/html; charset=utf-8');
+        if (artifacts.has(url.pathname)) {
+          const file = artifacts.get(url.pathname);
+          return send(200, file.bytes, file.type, file.filename ? { 'Content-Disposition': 'attachment; filename="' + file.filename + '"' } : {});
+        }
         return send(404, JSON.stringify({ error: '资源不存在。' }));
       }
       if (req.method !== 'POST' || url.pathname !== '/archify/generate' || req.headers['x-reader-token'] !== token || req.headers['content-type'] !== 'application/json') return send(403, JSON.stringify({ error: '生成请求身份不匹配。' }));
@@ -41,8 +44,16 @@ export async function serveReaderArchify(input, sourceRoot, { port = 0, outputDi
         const directory = join(output, randomBytes(16).toString('hex'));
         const promise = deliverReaderArchify(data, request.mainline, directory, sourceRoot).then(result => {
           const artifactUrl = '/archify/artifact/' + result.receipt.artifact.sha256 + '.html';
-          artifacts.set(artifactUrl, readFileSync(join(directory, 'diagram.html')));
-          return { projection: result.projection, receipt: result.receipt, artifactUrl };
+          artifacts.set(artifactUrl, { bytes: readFileSync(join(directory, 'diagram.html')), type: 'text/html; charset=utf-8' });
+          const downloads = {};
+          const stem = 'archify-' + request.mainline.replace(/[^a-zA-Z0-9_-]/g, '-') + '-' + data.snapshot.slice(0, 12);
+          for (const [key, filename] of Object.entries({ html: 'diagram.html', json: 'diagram.archify.json', proof: 'projection.json', receipt: 'receipt.json' })) {
+            const downloadUrl = '/archify/download/' + result.receipt.artifact.sha256 + '/' + filename;
+            const exportedName = stem + (key === 'html' ? '.html' : '-' + key + '.json');
+            artifacts.set(downloadUrl, { bytes: readFileSync(join(directory, filename)), type: key === 'html' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', filename: exportedName });
+            downloads[key] = downloadUrl;
+          }
+          return { projection: result.projection, receipt: result.receipt, artifactUrl, downloads };
         }).catch(error => { deliveries.delete(request.mainline); throw error; });
         deliveries.set(request.mainline, promise);
       }

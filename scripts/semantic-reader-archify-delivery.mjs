@@ -7,6 +7,7 @@ import { createArchifyProjection } from './semantic-reader-archify.mjs';
 
 const productRoot = fileURLToPath(new URL('../', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const projectorSha256 = digest(readFileSync(new URL('./semantic-reader-archify.mjs', import.meta.url)));
 // Older frozen readers stored source identity only in their adjacent receipt.
 // Reuse it only after Snapshot, Overlay and the complete file manifest agree.
 export function readArchifyReader(readerPath) {
@@ -56,19 +57,21 @@ export async function deliverReaderArchify(data, mainlineId, outputDirectory, so
     const result = runner(process.execPath, [archify, 'deliver', 'architecture', specPath, artifactPath, '--repo-root', root, '--quality', 'showcase', '--json'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 60000 });
     let toolReceipt;
     try { toolReceipt = JSON.parse(result.stdout); } catch { throw new Error('Archify 没有返回可校验的交付收据：' + (result.stderr ?? result.error?.message ?? '')); }
-    if (result.status !== 0 || !toolReceipt.ok) throw new Error(toolReceipt.error ?? result.stderr ?? 'Archify 交付失败。');
+    if (result.status !== 0 || !toolReceipt.ok) throw new Error((toolReceipt.error ?? result.stderr ?? 'Archify 交付失败。') + (toolReceipt.diagnostics?.length ? '\n' + toolReceipt.diagnostics.map(d => d.code + ': ' + d.message + ' ' + (d.supportedFixes ?? []).join('；')).join('\n') : ''));
     const bytes = readFileSync(artifactPath), specHash = digest(specBytes), artifactHash = digest(bytes);
     if (toolReceipt.specification?.sha256 !== specHash || toolReceipt.artifact?.sha256 !== artifactHash || toolReceipt.artifact.bytes !== bytes.length ||
       toolReceipt.validation?.checksPassed !== 9 || toolReceipt.validation?.checkCount !== 9 || toolReceipt.validation?.errors !== 0 || toolReceipt.validation?.warnings !== 0) throw new Error('Archify 收据摘要或 showcase 校验不匹配。');
+    const projectionBytes = JSON.stringify(projection, null, 2) + '\n';
     const receipt = { schema: 'reader-archify-delivery-v1', binding: projection.binding, input_sha256: projection.input_sha256,
-      projector_sha256: digest(readFileSync(new URL('./semantic-reader-archify.mjs', import.meta.url))),
+      projector_sha256: projectorSha256,
       archify_version: readFileSync(join(productRoot, '.agents/skills/archify/SKILL.md'), 'utf8').match(/version: \"([^\"]+)\"/)?.[1] ?? 'unknown',
       archify_cli_sha256: digest(readFileSync(archify)), specification: { path: 'diagram.archify.json', sha256: specHash, bytes: Buffer.byteLength(specBytes) },
       artifact: { path: 'diagram.html', sha256: artifactHash, bytes: bytes.length },
+      projection: { path: 'projection.json', sha256: digest(projectionBytes), bytes: Buffer.byteLength(projectionBytes) },
       counts: { nodes: projection.nodes.length, relations: projection.edges.length, evidence: Object.keys(projection.evidence).length, unknown: projection.unknowns.length },
       coverage: projection.coverage, unknowns: projection.unknowns, validation: toolReceipt.validation,
       browser_evidence: 'not_run', visual_review: 'not_run', application_executed: false };
-    writeFileSync(join(staging, 'projection.json'), JSON.stringify(projection, null, 2) + '\n');
+    writeFileSync(join(staging, 'projection.json'), projectionBytes);
     writeFileSync(join(staging, 'receipt.json'), JSON.stringify(receipt, null, 2) + '\n');
     // Retain Archify's exact diagnostic receipt separately; semantic receipt uses portable relative paths.
     writeFileSync(join(staging, 'archify-receipt.json'), JSON.stringify(toolReceipt, null, 2) + '\n');

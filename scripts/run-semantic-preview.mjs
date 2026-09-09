@@ -25,6 +25,7 @@ const referenceRoot = path.join(projectRoot, "references/zod");
 const corpusRoot = path.join(referenceRoot, "packages/zod/src/v3");
 const pythonCorpusRoot = path.join(projectRoot, "benchmark/corpus/python");
 const suppliedOutput = process.argv.find(item => item.startsWith("--output="))?.slice("--output=".length);
+if (process.argv.includes("--output=")) throw new Error("Explicit output must name a new directory");
 const outputRoot = suppliedOutput ? path.resolve(suppliedOutput) : path.join(projectRoot, ".workspace/acceptance/semantic-preview");
 if (suppliedOutput && existsSync(outputRoot)) throw new Error("Explicit output must be a new directory; existing frozen preview is preserved");
 const storePath = path.join(outputRoot, "preview.sqlite");

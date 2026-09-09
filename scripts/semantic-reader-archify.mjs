@@ -1,6 +1,6 @@
 import { readerCanonicalJson } from './semantic-reader-comparison.mjs';
 
-export const ARCHIFY_PROJECTOR_VERSION = 'reader-archify-v2';
+export const ARCHIFY_PROJECTOR_VERSION = 'reader-archify-v3';
 export async function readerArchifyDigest(value) {
   const bytes = new TextEncoder().encode(typeof value === 'string' ? value : readerCanonicalJson(value));
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -20,6 +20,9 @@ export async function createArchifyProjection(data, mainlineId) {
   const keys = [...new Set((mainline.stages ?? []).flatMap(s => s.keys ?? []))];
   if (!keys.length) fail('主线没有绑定定义。');
   if (keys.length > 12) fail('主线超过 12 个节点展示预算；请提供更小的来源绑定主线，未截断或补画。');
+  const stageIds = new Set(mainline.stages.map(s => s.id));
+  if (stageIds.size !== mainline.stages.length || mainline.stages.some(s => typeof s.id !== 'string' || !s.id) ||
+    (mainline.edges ?? []).some(e => !stageIds.has(e.from) || !stageIds.has(e.to))) fail('阶段身份或连接无法核对。');
   for (const stage of mainline.stages) {
     const declared = [...new Set(stage.keys ?? [])].sort(), referenced = [...new Set((stage.refs ?? []).map(r => r.definition_key))].sort();
     if (readerCanonicalJson(declared) !== readerCanonicalJson(referenced)) fail('阶段引用与声明成员不一致。');
@@ -43,15 +46,7 @@ export async function createArchifyProjection(data, mainlineId) {
     usedEvidence.add(id); return e;
   };
   const closeEvidence = async value => {
-    if (!value || typeof value !== 'object') return;
-    for (const [key, item] of Object.entries(value)) {
-      if (key.endsWith('evidence_id') && item !== null) { if (typeof item !== 'string') fail('Evidence 引用格式不正确。'); await evidence(item); }
-      if (key.endsWith('evidence_ids')) {
-        if (!Array.isArray(item)) fail('Evidence 列表格式不正确。');
-        for (const id of item) await evidence(id);
-      }
-      if (item && typeof item === 'object') await closeEvidence(item);
-    }
+    for (const id of readerArchifyEvidenceIds(value)) await evidence(id);
   };
   const nodes = [];
   for (const key of keys) {
@@ -85,7 +80,7 @@ export async function createArchifyProjection(data, mainlineId) {
     const ref = { fact_id: f.fact_id ?? null, definition_key: f.subject.definition_key };
     if (!['compiler_exact', 'static_possible'].includes(f.basis?.kind)) { unknowns.push({ ...ref, reason: 'unverified_basis', basis: f.basis?.kind ?? 'unknown' }); continue; }
     if (!f.value?.target_definition_key) { unknowns.push({ ...ref, reason: 'unresolved_call' }); continue; }
-    if (!f.evidence_ids?.length || !f.value.call_site_evidence_id) fail('已解析调用缺少 Evidence。');
+    if (typeof f.fact_id !== 'string' || !f.fact_id || !f.evidence_ids?.length || !f.value.call_site_evidence_id) fail('已解析调用缺少 Evidence。');
     await closeEvidence(f);
     const site = data.evidence[f.value.call_site_evidence_id], from = definitions.get(f.subject.definition_key);
     if (site.file_path !== from.file_path || site.span.start_byte < from.definition_span.start_byte || site.span.end_byte > from.definition_span.end_byte) fail('调用点 Evidence 不属于源 Definition。');
@@ -104,35 +99,86 @@ export async function createArchifyProjection(data, mainlineId) {
   if (data.relationCandidates?.length) unknowns.push({ reason: 'relation_candidates_not_projected', count: data.relationCandidates.length, scope: 'snapshot' });
   if (data.relationCandidates === undefined) unknowns.push({ reason: 'relation_candidates_unavailable', count: null });
   if (data.coverage?.status !== 'complete') unknowns.push({ reason: 'partial_coverage', coverage: data.coverage ?? { status: 'unknown' } });
-  unknowns.push({ reason: 'runtime_not_projected' });
+  const runtime = await readerArchifyRuntime(data, nodes.map(n => n.definition_key));
+  if (runtime.status === 'unavailable') unknowns.push({ reason: runtime.reason });
+  const exploration = {
+    basis: 'llm_inferred', verified: false,
+    stages: mainline.stages.map(s => ({ id: s.id, title: s.title, description: s.description ?? '',
+      node_ids: nodes.filter(n => n.stages.some(t => t.id === s.id)).map(n => n.id),
+      outcome: ['success', 'failure'].includes(s.outcome) ? s.outcome : 'unknown',
+      boundary: ['async', 'state'].includes(s.boundary) ? s.boundary : 'unknown' })),
+    stage_edges: (mainline.edges ?? []).map(e => ({ from: e.from, to: e.to })),
+    boundary_unknowns: ['retry_transaction_compensation_not_proven'], runtime,
+  };
   const evidenceIds = [...usedEvidence].sort(), sourceFiles = [...verified].map(([path, { file }]) => ({ path, source_digest: file.source_digest })).sort((a, b) => a.path.localeCompare(b.path));
   const binding = { repository: data.repository, repository_url: repositoryUrl, snapshot: data.snapshot, overlay_hash: data.overlayHash ?? null, revision: data.revision, mainline_id: mainlineId, projector_version: ARCHIFY_PROJECTOR_VERSION };
-  const columns = Math.min(nodes.length, nodes.length < 5 ? 2 : 3), rows = Math.ceil(nodes.length / columns);
-  const stageViews = mainline.stages.length <= 5 ? mainline.stages.map((s, i) => ({ id: 'stage-' + i, label: s.title, focus: nodes.filter(n => n.stages.some(t => t.id === s.id)).map(n => n.id), note: '阶段为 llm_inferred、未验证；节点与连线只来自当前源码投影。' })) : [];
-  const spec = { schema_version: 1, diagram_type: 'architecture', meta: { title: mainline.title + ' · 源码主线', locale: 'zh-CN', quality_profile: 'showcase', viewBox: [columns * 460 + 80, rows * 270 + 140], ...(stageViews.length ? { views: stageViews } : {}), repository: { url: repositoryUrl, revision: data.revision, link_mode: 'local-only' } },
-    layout: { mode: 'grid', cols: columns, cellW: 300, cellH: 140, gapX: 160, gapY: 130, origin: [80, 80] },
+  const columns = Math.min(nodes.length, nodes.length < 5 ? 2 : nodes.length < 10 ? 3 : 4), rows = Math.ceil(nodes.length / columns);
+  const cellW = columns === 4 ? 260 : 300, gapX = columns === 4 ? 70 : columns === 3 ? 120 : 160;
+  const originX = nodes.length === 1 ? 350 : columns === 4 ? 40 : columns === 3 ? 70 : 80;
+  const canvasWidth = Math.max(1000, originX * 2 + columns * cellW + (columns - 1) * gapX);
+  const position = index => { const row = Math.floor(index / columns); return { row, col: columns > 2 && row % 2 ? columns - 1 - index % columns : index % columns }; };
+  const spec = { schema_version: 1, diagram_type: 'architecture', meta: { title: mainline.title + ' · 源码主线', locale: 'zh-CN', quality_profile: 'showcase', viewBox: [canvasWidth, Math.max(450, rows * 240 + (columns >= 3 ? 80 : 100))], repository: { url: repositoryUrl, revision: data.revision, link_mode: 'local-only' } },
+    layout: { mode: 'grid', cols: columns, cellW, cellH: 140, gapX, gapY: 100, origin: [originX, nodes.length === 1 ? 155 : 80] },
     components: nodes.map((n, index) => ({ id: n.id, type: 'backend', label: n.qualified_name, sublabel: n.file_path + ' · L' + n.line,
-      tag: n.stages[0].title + ' · 推断阶段', size: [300, 140], row: Math.floor(index / columns), col: index % columns,
+      tag: n.stages[0].title + ' · 推断阶段', size: [cellW, 140], ...position(index),
       sources: [{ path: n.file_path, line: n.line, end_line: n.end_line, label: '源码声明' }] })),
     connections: edges.map(e => {
-      const from = nodes.findIndex(n => n.id === e.from), to = nodes.findIndex(n => n.id === e.to);
+      const from = position(nodes.findIndex(n => n.id === e.from)), to = position(nodes.findIndex(n => n.id === e.to));
       const edge = { id: e.id, from: e.from, to: e.to, label: e.basis === 'compiler_exact' ? '已解析调用' : '静态可能调用' };
       // Diagnosed skip-column edges must use the free corridor below their row.
-      if (Math.floor(from / columns) === Math.floor(to / columns) && Math.abs(from - to) > 1) {
-        const y = 80 + Math.floor(from / columns) * 270 + 220;
-        Object.assign(edge, { fromSide: 'bottom', toSide: 'bottom', via: [[230 + (from % columns) * 460, y], [230 + (to % columns) * 460, y]] });
+      if (from.row === to.row && Math.abs(from.col - to.col) > 1) {
+        const y = 80 + from.row * 240 + 190;
+        Object.assign(edge, { fromSide: 'bottom', toSide: 'bottom', via: [[originX + cellW / 2 + from.col * (cellW + gapX), y], [originX + cellW / 2 + to.col * (cellW + gapX), y]] });
       }
-      if (from % columns === to % columns && Math.abs(Math.floor(from / columns) - Math.floor(to / columns)) === 1) {
-        edge.labelAt = [230 + (from % columns) * 460, 80 + Math.min(Math.floor(from / columns), Math.floor(to / columns)) * 270 + 205];
+      if (from.col === to.col && Math.abs(from.row - to.row) === 1) {
+        edge.labelAt = [originX + cellW / 2 + from.col * (cellW + gapX), 80 + Math.min(from.row, to.row) * 240 + 190];
       }
       return edge;
     }),
     cards: [{ dot: 'slate', title: '来源与边界', items: [`Snapshot ${data.snapshot.slice(0, 12)} · ${nodes.length} 个定义 · ${edges.length} 条调用 · ${evidenceIds.length} 条 Evidence。`, `Coverage ${data.coverage?.status ?? 'unknown'} · ${unknowns.length} 项边界；阶段为 llm_inferred、未验证，连线不代表执行顺序。`] }] };
-  const input = { binding, mainline, definitions: keys.map(k => definitions.get(k)), facts: (data.facts ?? []).filter(f => f.kind === 'call_target' && included.has(f.subject?.definition_key)), sourceFiles, evidence: evidenceIds.map(id => data.evidence[id]), coverage: data.coverage ?? null, relationCandidates: data.relationCandidates ?? null };
-  return { schema: 'reader-archify-projection-v1', binding, input_sha256: await readerArchifyDigest(input), spec, nodes, edges, unknowns, coverage: data.coverage ?? { status: 'unknown' }, sourceFiles,
+  const input = { binding, mainline, definitions: keys.map(k => definitions.get(k)), facts: (data.facts ?? []).filter(f => f.kind === 'call_target' && included.has(f.subject?.definition_key)), sourceFiles, evidence: evidenceIds.map(id => data.evidence[id]), coverage: data.coverage ?? null, relationCandidates: data.relationCandidates ?? null, runtime: data.runtime ?? null };
+  return { schema: 'reader-archify-projection-v1', binding, input_sha256: await readerArchifyDigest(input), spec, nodes, edges, exploration, unknowns, coverage: data.coverage ?? { status: 'unknown' }, sourceFiles,
+    facts: Object.fromEntries(calls.filter(f => included.has(f.value.target_definition_key)).map(f => [f.fact_id, f])),
     evidence: Object.fromEntries(evidenceIds.map(id => [id, data.evidence[id]])) };
 }
 
 export async function createArchifyMainlineSpec(data, mainlineId) {
   return (await createArchifyProjection(data, mainlineId)).spec;
+}
+
+// A shared collector keeps lazy hydration and strict closure on the same reference grammar.
+export function readerArchifyEvidenceIds(value) {
+  const ids = new Set();
+  const add = id => { if (typeof id !== 'string' || !id) throw new Error('Evidence 引用格式不正确。'); ids.add(id); };
+  const visit = item => {
+    if (!item || typeof item !== 'object') return;
+    for (const [key, child] of Object.entries(item)) {
+      if (key.endsWith('evidence_id') && child !== null) add(child);
+      if (key.endsWith('evidence_ids')) {
+        if (!Array.isArray(child)) throw new Error('Evidence 列表格式不正确。');
+        child.forEach(add);
+      }
+      if (child && typeof child === 'object') visit(child);
+    }
+  };
+  visit(value); return [...ids];
+}
+
+// Observations stay in a separate layer; no observed status is ever assigned to static edges/stages.
+export async function readerArchifyRuntime(data, keys) {
+  const unavailable = reason => ({ status: 'unavailable', reason, observations: [] });
+  if (!data.runtime) return unavailable('runtime_unavailable');
+  const { observation_set_hash, ...runtime } = data.runtime;
+  if (!/^[a-f0-9]{64}$/.test(observation_set_hash ?? '') || await readerArchifyDigest(runtime) !== observation_set_hash ||
+    runtime.repository_id !== data.repository || runtime.snapshot_id !== data.snapshot || runtime.semantic_overlay_hash !== data.overlayHash ||
+    typeof runtime.execution_id !== 'string' || !runtime.execution_id || !/^[a-f0-9]{64}$/.test(runtime.trace_digest ?? '') ||
+    !Array.isArray(runtime.observations) || runtime.observations.some(o => o.execution_id !== runtime.execution_id || o.basis?.kind !== 'runtime_observed' || o.basis?.scope !== 'single_execution')) return unavailable('runtime_hash_or_version_mismatch');
+  if (runtime.coverage?.reason_codes?.includes('trace_source_binding_unverified')) return unavailable('trace_source_binding_unverified');
+  const included = new Set(keys), definitions = new Map(data.definitions.map(d => [d.definition_key, d]));
+  if (runtime.observations.some(o => o.definition_key && (!definitions.has(o.definition_key) || definitions.get(o.definition_key).file_path !== o.file_path))) return unavailable('runtime_definition_mismatch');
+  return { status: 'partial', execution_id: runtime.execution_id, snapshot: runtime.snapshot_id, overlay_hash: runtime.semantic_overlay_hash,
+    observation_set_hash, trace_digest: runtime.trace_digest, coverage: runtime.coverage,
+    observations: runtime.observations.filter(o => included.has(o.definition_key)),
+    unmapped_count: runtime.observations.filter(o => !included.has(o.definition_key)).length,
+    stage_execution: 'unknown', other_paths: 'unknown' };
 }

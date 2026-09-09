@@ -5,16 +5,16 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { archifyFixture } from '../fixtures/reader-archify/fixture.mjs';
+import { archifyFixture, linearArchifyFixture } from '../fixtures/reader-archify/fixture.mjs';
 import { deliverReaderArchify, readArchifyReader } from '../../scripts/semantic-reader-archify-delivery.mjs';
 import { serveReaderArchify } from '../../scripts/serve-reader-archify.mjs';
 
-function repository(t) {
+function repository(t, data = archifyFixture()) {
   const root = mkdtempSync(join(tmpdir(), 'reader-archify-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = (...args) => execFileSync('git', ['-C', root, '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-q'); git('remote', 'add', 'origin', 'https://github.com/example/repo');
-  const data = archifyFixture(); mkdirSync(join(root, 'src')); writeFileSync(join(root, data.files[0].path), data.files[0].source);
+  mkdirSync(join(root, 'src')); writeFileSync(join(root, data.files[0].path), data.files[0].source);
   git('add', 'src'); git('-c', 'user.name=Reader Test', '-c', 'user.email=reader@example.test', 'commit', '-qm', 'fixture');
   data.revision = git('rev-parse', 'HEAD');
   return { root, data };
@@ -66,6 +66,15 @@ test('delivery binds real Git source, projection and exact artifact bytes, then 
   assert.equal((await fetch(url + '/archify/generate', { method: 'POST', headers, body: JSON.stringify({ mainline: 'flow' }), })).status, 200);
   const response = await fetch(url + '/archify/generate', { method: 'POST', headers, body: JSON.stringify({ mainline: 'flow' }) });
   const body = await response.json();
+  for (const [key, descriptor] of Object.entries({ html: body.receipt.artifact, json: body.receipt.specification, proof: body.receipt.projection })) {
+    const download = await fetch(url + body.downloads[key]);
+    assert.match(download.headers.get('Content-Disposition') ?? '', /^attachment; filename="archify-flow-/);
+    const bytes = Buffer.from(await download.arrayBuffer());
+    assert.equal(bytes.length, descriptor.bytes);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), descriptor.sha256);
+  }
+  const receiptDownload = await fetch(url + body.downloads.receipt);
+  assert.deepEqual(await receiptDownload.json(), body.receipt);
   const artifact = await (await fetch(url + body.artifactUrl)).text();
   assert.equal(createHash('sha256').update(artifact).digest('hex'), body.receipt.artifact.sha256);
   assert.equal((await fetch(url + '/archify/generate', { method: 'POST', headers: { ...headers, Origin: 'https://foreign.example' }, body: JSON.stringify({ mainline: 'flow' }) })).status, 403);
@@ -85,4 +94,14 @@ test('legacy source identity requires exact adjacent receipt binding and never u
   writeFileSync(join(root, 'receipt.json'), JSON.stringify({ ...receipt, snapshot_id: 'different' }));
   assert.throws(() => readArchifyReader(file), /不一致/);
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).revision, null);
+});
+
+test('twelve-node display budget retains readable context and eleven routed calls', { skip: !archifyInstalled }, async t => {
+  const { root, data } = repository(t, linearArchifyFixture(12));
+  const result = await deliverReaderArchify(data, 'flow', join(root, 'twelve'), root);
+  assert.equal(result.receipt.counts.nodes, 12); assert.equal(result.receipt.counts.relations, 11);
+  assert.equal(result.receipt.validation.checksPassed, 9);
+  const tooLarge = linearArchifyFixture(13); tooLarge.revision = data.revision;
+  await assert.rejects(deliverReaderArchify(tooLarge, 'flow', join(root, 'too-large'), root), /12 个节点/);
+  assert.ok(!existsSync(join(root, 'too-large')));
 });
