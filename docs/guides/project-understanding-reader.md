@@ -49,7 +49,11 @@ python3 -m http.server 8773 --bind 127.0.0.1 --directory .workspace/acceptance
 node scripts/serve-reader-archify.mjs /absolute/path/to/reader-data.json /absolute/path/to/source-repository
 ```
 
-打开命令输出的本机 URL，在主线页选择“预览 Archify 图”。核对节点数、关系数、边界项、Coverage、Snapshot 和 revision 后，可下载 Archify JSON、投影证据、离线 HTML 与交付收据。选择图节点可核对来源并回到 Reader 中的正确源码；返回主线保留选中对象。普通离线 Reader 可准备并导出 JSON，HTML 生成需要上述本机入口或以下命令。
+打开命令输出的本机 URL，在主线页选择“预览 Archify 图”。核对节点数、关系数、边界项、Coverage、Snapshot 和 revision 后，可下载 Archify JSON、投影证据、离线 HTML 与交付收据。选择图节点或关系按需核对 Evidence、Claim Basis、Coverage 和源码，再回到 Reader 中的正确定义；返回主线保留选中对象与阶段。普通离线 Reader 可准备并导出 JSON，HTML 生成需要上述本机入口或以下命令。
+
+可选择全部路径、已有正常／失败结果标签对应的候选路径或单个阶段；这些阶段与路径仍为 `llm_inferred`、未验证。缺少结果标签时对应按钮不可用。Runtime Observation 单独展示，需通过 Repository、Snapshot、Overlay、Execution 与 observation-set 摘要校验；函数观测不证明阶段或整条路径执行。版本失配会停止来源加载并保留上次核对的详情。
+
+桌面支持明暗主题；窄屏图面可以横向滚动或用左右方向键移动，并有可直接操作的节点／关系来源目录。单图预算为 12 个定义，超限明确拒绝，尚不支持自动拆分大型主线。四类下载使用包含主线身份的输入摘要隔离，即使不同主线生成相同 HTML，也不会覆盖彼此的证明或收据。
 
 命令行交付到一个新目录：
 
