@@ -105,3 +105,30 @@ test('twelve-node display budget retains readable context and eleven routed call
   await assert.rejects(deliverReaderArchify(tooLarge, 'flow', join(root, 'too-large'), root), /12 个节点/);
   assert.ok(!existsSync(join(root, 'too-large')));
 });
+
+
+test('identical HTML from distinct mainlines keeps each complete download binding', { skip: !archifyInstalled }, async t => {
+  const { root, data } = repository(t);
+  data.mainlines.push({ ...structuredClone(data.mainlines[0]), id: 'flow-copy' });
+  const { server, url } = await serveReaderArchify(data, root);
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const page = await (await fetch(url)).text();
+  const bootstrap = JSON.parse(page.match(/<script id="reader-data" type="application\/json">([^<]+)<\/script>/)[1]);
+  const headers = { 'Content-Type': 'application/json', 'X-Reader-Token': bootstrap.archifyService.token };
+  const results = [];
+  for (const mainline of ['flow', 'flow-copy']) {
+    const response = await fetch(url + '/archify/generate', { method: 'POST', headers, body: JSON.stringify({ mainline }) });
+    assert.equal(response.status, 200); results.push(await response.json());
+  }
+  assert.equal(results[0].receipt.artifact.sha256, results[1].receipt.artifact.sha256);
+  assert.notEqual(results[0].downloads.proof, results[1].downloads.proof);
+  for (const result of results) {
+    assert.deepEqual(await (await fetch(url + result.downloads.receipt)).json(), result.receipt);
+    for (const [key, descriptor] of Object.entries({ html: result.receipt.artifact, json: result.receipt.specification, proof: result.receipt.projection })) {
+      const response = await fetch(url + result.downloads[key]);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), descriptor.sha256);
+      assert.equal(bytes.length, descriptor.bytes);
+    }
+  }
+});

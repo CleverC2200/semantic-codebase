@@ -48,7 +48,7 @@ export async function serveReaderArchify(input, sourceRoot, { port = 0, outputDi
           const downloads = {};
           const stem = 'archify-' + request.mainline.replace(/[^a-zA-Z0-9_-]/g, '-') + '-' + data.snapshot.slice(0, 12);
           for (const [key, filename] of Object.entries({ html: 'diagram.html', json: 'diagram.archify.json', proof: 'projection.json', receipt: 'receipt.json' })) {
-            const downloadUrl = '/archify/download/' + result.receipt.artifact.sha256 + '/' + filename;
+            const downloadUrl = '/archify/download/' + result.receipt.input_sha256 + '/' + filename;
             const exportedName = stem + (key === 'html' ? '.html' : '-' + key + '.json');
             artifacts.set(downloadUrl, { bytes: readFileSync(join(directory, filename)), type: key === 'html' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8', filename: exportedName });
             downloads[key] = downloadUrl;

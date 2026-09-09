@@ -34,7 +34,7 @@ export function createReaderArchifyPanel(data, loader, { onChange, onLoaded, ann
           await readerArchifyDigest(JSON.stringify(result.projection, null, 2) + '\n') !== result.receipt.projection.sha256) throw new Error('生成结果版本或摘要不匹配，已保留原图。');
         const expected = '/archify/artifact/' + result.receipt.artifact.sha256 + '.html';
         if (result.artifactUrl !== expected || Object.entries({ html: 'diagram.html', json: 'diagram.archify.json', proof: 'projection.json', receipt: 'receipt.json' }).some(([key, name]) =>
-          result.downloads?.[key] !== '/archify/download/' + result.receipt.artifact.sha256 + '/' + name)) throw new Error('交付资源地址不匹配，已保留原图。');
+          result.downloads?.[key] !== '/archify/download/' + result.receipt.input_sha256 + '/' + name)) throw new Error('交付资源地址不匹配，已保留原图。');
       } else {
         const line = data.mainlines.find(m => m.id === id), keys = [...new Set(line.stages.flatMap(s => s.keys))];
         for (const key of keys) await loader.definition(key);
