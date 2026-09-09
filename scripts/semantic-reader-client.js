@@ -3,6 +3,7 @@
   const $ = id => document.getElementById(id);
   const E = x => String(x ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
   const loader = createReaderAssetLoader(D);
+  const archifyPanel = createReaderArchifyPanel(D, loader, { onChange: () => { savePosition(); if (S.context === 'mainline') render(); }, onLoaded: rebuildAnalysis, announce });
   let M = createReaderGraphModel(D), defs = M.definitions, functions = M.functions, calls = M.calls;
   const own = key => D.facts.filter(f => f.subject.definition_key === key);
   const label = key => defs.get(key)?.qualified_name ?? '未解析目标';
@@ -17,7 +18,7 @@
   const mainlines = D.mainlines ?? [];
   const searchIndex = readerSearchIndex(D);
   const initialFile = D.initialFile ?? D.files.find(f => f.path.endsWith('/parseUtil.ts'))?.path ?? D.files[0]?.path;
-  let S = { context: D.overview ? 'overview' : 'file', file: initialFile, mode: 'text', reader: null, fn: null, mainline: mainlines[0]?.id, stage: null, detail: null, node: null, edge: null };
+  let S = { context: D.archifyService && mainlines.some(m => m.available) ? 'mainline' : D.overview ? 'overview' : 'file', file: initialFile, mode: 'text', reader: null, fn: null, mainline: (D.archifyService ? mainlines.find(m => m.available) : mainlines[0])?.id, stage: null, detail: null, node: null, edge: null };
   const comparison = { base: null, target: D, pairs: [], result: null, selected: null, error: '', verificationRecords: [] };
   const requirementPanel = createReaderRequirementPanel(D, { storage: capabilityStorage, beforeReview: prepareRequirements, onChange: () => { if (S.context === 'requirements') render(); } });
   let wrapSource = true, detailNavigation = null, graph = null, graphCacheKey = '', graphSelection = null;
@@ -45,6 +46,8 @@
         status.innerHTML = '资源未能加载或版本校验失败；当前阅读位置已保留。<button data-load-retry>重试</button>';
         announce(error.message);
       }
+    if (await archifyPanel.handleClick(el, S.mainline)) return;
+    if (content && S.context === 'mainline') archifyPanel.wireFrame(S.mainline);
       return false;
     }
   }
@@ -395,7 +398,7 @@
     const m = M.flowOverview(S.mainline);
     if (!m) return '<p class="empty">没有可查看的主线。</p>';
     if (!m.available) return `<h1>${E(m.title)}</h1><p class="empty">${E(m.unavailable)}</p>`;
-    return `<div class="breadcrumb">项目主线 / 源码支持的候选</div><h1>${E(m.title)}</h1><p class="lede">${E(m.purpose)}</p><div class="mainline-actions"><button data-export-archify>导出 Archify 图规格</button><span class="muted">当前版本 · ${m.definitionKeys.length} 个绑定函数 · Coverage ${E(D.coverage?.status ?? "unknown")}</span><details><summary>导出范围</summary><p>仅当前 Snapshot 的主线函数、已解析调用和来源摘要；unknown 与未映射关系保留在图例说明。</p></details></div>${flowBoundaryHtml(m)}${runtimeHtml(m)}<dl class="mainline-io"><div><dt>触发</dt><dd>${E(m.trigger)}</dd></div><div><dt>输入</dt><dd>${E(m.input)}</dd></div><div><dt>结果</dt><dd>${E(m.output)}</dd></div></dl>${graphHtml()}<details class="details"><summary>参与实现 · ${m.definitionKeys.length}</summary><div class="links">${m.definitionKeys.map(fnLink).join('')}</div></details><section class="stage-notes"><h2>按阶段阅读</h2><p class="muted">选择说明可同步高亮图中节点；右侧显示该阶段的函数与源码。</p>${m.stages.map(stage => `<article class="stage-note" data-note-id="${E(stage.id)}"><button data-stage="${E(stage.id)}"><strong>${E(stage.title)}</strong></button><p>${E(stage.description)}</p><button class="toolbar-link" data-stage-locate="${E(stage.id)}">在图中定位</button></article>`).join('')}</section><details class="explanation-origin"><summary>候选主线的范围与来源</summary><p>${E(m.boundary)}</p><p>阶段与注释为 llm_inferred、未验证的展示说明，绑定当前源码哈希。并非完整业务链，也没有作为运行轨迹验收。</p></details>`;
+    return `<div class="breadcrumb">项目主线 / 源码支持的候选</div><h1>${E(m.title)}</h1><p class="lede">${E(m.purpose)}</p>${archifyPanel.view(S.mainline)}${flowBoundaryHtml(m)}${runtimeHtml(m)}<dl class="mainline-io"><div><dt>触发</dt><dd>${E(m.trigger)}</dd></div><div><dt>输入</dt><dd>${E(m.input)}</dd></div><div><dt>结果</dt><dd>${E(m.output)}</dd></div></dl>${archifyPanel.isOpen(S.mainline) ? '' : graphHtml()}<details class="details"><summary>参与实现 · ${m.definitionKeys.length}</summary><div class="links">${m.definitionKeys.map(fnLink).join('')}</div></details><section class="stage-notes"><h2>按阶段阅读</h2><p class="muted">选择说明可同步高亮图中节点；右侧显示该阶段的函数与源码。</p>${m.stages.map(stage => `<article class="stage-note" data-note-id="${E(stage.id)}"><button data-stage="${E(stage.id)}"><strong>${E(stage.title)}</strong></button><p>${E(stage.description)}</p><button class="toolbar-link" data-stage-locate="${E(stage.id)}">在图中定位</button></article>`).join('')}</section><details class="explanation-origin"><summary>候选主线的范围与来源</summary><p>${E(m.boundary)}</p><p>阶段与注释为 llm_inferred、未验证的展示说明，绑定当前源码哈希。并非完整业务链，也没有作为运行轨迹验收。</p></details>`;
   }
   function updateHighlights() {
     document.querySelectorAll('[data-change]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.change === comparison.selected)));
@@ -683,7 +686,6 @@
     else if (el.hasAttribute('data-open-requirements')) enterRequirements();
     else if (el.hasAttribute('data-project-overview')) enterOverview();
     else if (el.hasAttribute('data-open-comparison')) enterComparison();
-    else if (el.hasAttribute('data-export-archify')) { try { const spec = createArchifyMainlineSpec(D, S.mainline); const stamp = 'archify-' + S.mainline + '-' + D.snapshot.slice(0, 12); const url = URL.createObjectURL(new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = stamp + '.json'; link.click(); const receipt = { schema: 'semantic-reader-archify-receipt-v1', snapshot: D.snapshot, revision: D.revision ?? null, mainline: S.mainline, component_count: spec.components.length, connection_count: spec.connections.length, coverage: D.coverage ?? null, evidence_boundary: 'Static projection only; unknown, partial and runtime boundaries are preserved.' }; const receiptUrl = URL.createObjectURL(new Blob([JSON.stringify(receipt, null, 2)], { type: 'application/json' })); const receiptLink = document.createElement('a'); receiptLink.href = receiptUrl; receiptLink.download = stamp + '-receipt.json'; receiptLink.click(); setTimeout(() => { URL.revokeObjectURL(url); URL.revokeObjectURL(receiptUrl); }, 1000); announce('已导出当前主线的 Archify 图规格与收据。'); } catch (error) { announce(error.message); } }
     else if (el.hasAttribute('data-export-bundle')) { if (!await loadFor(() => loader.all(), () => el.click())) return; const url = URL.createObjectURL(new Blob([JSON.stringify(D)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = 'reader-' + D.snapshot.slice(0, 16) + '.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
     else if (el.hasAttribute('data-base-current') || el.hasAttribute('data-target-current')) { comparison[el.hasAttribute('data-base-current') ? 'base' : 'target'] = D; comparison.pairs = []; comparison.selected = null; comparison.error = ''; comparison.result = comparison.base ? compareReaderSnapshots(comparison.base, comparison.target) : null; S.detail = null; render(); }
     else if (el.hasAttribute('data-clear-correspondences')) { comparison.pairs = []; comparison.selected = null; comparison.result = compareReaderSnapshots(comparison.base, comparison.target); S.detail = null; render(); }

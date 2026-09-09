@@ -1,5 +1,5 @@
 import { renderSemanticPreview } from "./semantic-preview-explorer.mjs";
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
@@ -24,7 +24,8 @@ const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const referenceRoot = path.join(projectRoot, "references/zod");
 const corpusRoot = path.join(referenceRoot, "packages/zod/src/v3");
 const pythonCorpusRoot = path.join(projectRoot, "benchmark/corpus/python");
-const outputRoot = path.join(projectRoot, ".workspace/acceptance/semantic-preview");
+const suppliedOutput = process.argv.find(item => item.startsWith("--output="))?.slice("--output=".length);
+const outputRoot = suppliedOutput ? path.resolve(suppliedOutput) : path.join(projectRoot, ".workspace/acceptance/semantic-preview");
 const storePath = path.join(outputRoot, "preview.sqlite");
 const excludedDirectories = new Set(["tests", "__tests__", "benchmarks", "fixtures"]);
 const focusFile = "packages/zod/src/v3/helpers/parseUtil.ts";
@@ -221,6 +222,7 @@ const receipt = {
 };
 
 rmSync(outputRoot, { recursive: true, force: true });
+if (suppliedOutput && existsSync(outputRoot)) throw new Error("Explicit output must be a new directory; existing frozen preview is preserved");
 mkdirSync(outputRoot, { recursive: true });
 const store = new SqliteSnapshotStore(storePath);
 try {

@@ -35,6 +35,9 @@ const state = new RepositoryIndexer({ adapters: [python ? new PythonTreeSitterAd
 const overlay = (python ? new PythonPyrightEnricher() : new TypeScriptSemanticEnricher()).enrich({ state, source });
 const reader = presentationArg ? JSON.parse(readFileSync(presentationArg,'utf8')) : {};
 reader.project ??= path.basename(repo); reader.sourceRoot ??= ''; reader.explanations ??= { files:{} }; reader.capabilities ??= []; reader.mainlines ??= [];
+if (sourceIdentity.source_kind === 'git_root') {
+  try { sourceIdentity.source_origin = git('remote', 'get-url', 'origin'); } catch { sourceIdentity.source_origin = null; }
+}
 const productRoot = fileURLToPath(new URL('../', import.meta.url));
 const toolFiles = directory => readdirSync(path.join(productRoot,directory),{withFileTypes:true}).flatMap(e=>e.isDirectory()?toolFiles(directory+'/'+e.name):e.isFile()?[directory+'/'+e.name]:[]);
 const productFiles = [...toolFiles('dist'),...toolFiles('scripts'),'package-lock.json'].sort();
@@ -58,7 +61,7 @@ for (const file of files) if (sha256Bytes(readFileSync(path.join(repo,file.relat
 mkdirSync(output,{recursive:true,mode:0o700});
 const store = new SqliteSnapshotStore(path.join(output,'preview.sqlite'));
 try { store.beginBuild(state.repository_id,state.snapshot_id);store.publishReady(state);store.publishSemanticOverlay(overlay); } finally { store.close(); }
-const input={overlay,reader,receipt,revision:receipt.source_head ?? null,definitionsByKey:new Map(state.graph.definitions.map(d=>[d.definition_key,d])),sourceFiles:files,manifest:state.manifest,structuralGraph:state.graph};
+const input={overlay,reader,receipt,revision:receipt.source_head ?? null,repositoryUrl:receipt.source_origin ?? null,definitionsByKey:new Map(state.graph.definitions.map(d=>[d.definition_key,d])),sourceFiles:files,manifest:state.manifest,structuralGraph:state.graph};
 for (const [name,value] of Object.entries({'receipt.json':receipt,'semantic-overlay.json':overlay,'reader-data.json':buildReaderData(input),'presentation.json':reader})) writeFileSync(path.join(output,name),JSON.stringify(value,null,2)+'\n');
 writeFileSync(path.join(output,'acceptance.html'),renderSemanticPreview(input));
 console.log(JSON.stringify({output,...receipt.counts,coverage:overlay.coverage.status,analysis_ms:receipt.analysis_ms}));
