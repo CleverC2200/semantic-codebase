@@ -46,8 +46,6 @@
         status.innerHTML = '资源未能加载或版本校验失败；当前阅读位置已保留。<button data-load-retry>重试</button>';
         announce(error.message);
       }
-    if (await archifyPanel.handleClick(el, S.mainline)) return;
-    if (content && S.context === 'mainline') archifyPanel.wireFrame(S.mainline);
       return false;
     }
   }
@@ -508,6 +506,7 @@
       if (S.context === 'file' && S.mode === 'text') { graph = null; graphCacheKey = ''; }
       $('center').innerHTML = S.context === 'requirements' ? requirementPanel.view() : S.context === 'overview' ? overviewView() : S.context === 'comparison' ? comparisonView() : S.context === 'capability' ? capabilityView() : S.context === 'mainline' ? mainlineView() : S.mode === 'text' ? (S.reader ? functionView() : fileView()) : fileGraphView();
     }
+    if (content && S.context === 'mainline') archifyPanel.wireFrame(S.mainline);
     renderPicker(); inspector(); $('inspector').scrollTop = detailTop;
     updateHighlights(); restorePosition();
   }
@@ -679,6 +678,7 @@
       const retry = async () => { if (await loadFor(action, retry)) render(); };
       await retry(); return;
     }
+    if (await archifyPanel.handleClick(el, S.mainline)) return;
     if (await requirementPanel.handleClick(el)) return;
     if (el.dataset.logicJump) { const target = document.getElementById('logic-' + el.dataset.logicJump.replace(':','-')); target?.scrollIntoView({ block: 'start', behavior: 'auto' }); target?.querySelector('button')?.focus({ preventScroll: true }); }
     else if (el.dataset.comparisonFunction) { savePosition(); comparison.focus = { key: el.dataset.comparisonFunction, side: el.dataset.comparisonSide }; S.detail = null; render(); $('reading').scrollTop = 0; }

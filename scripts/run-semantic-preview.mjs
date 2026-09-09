@@ -26,6 +26,7 @@ const corpusRoot = path.join(referenceRoot, "packages/zod/src/v3");
 const pythonCorpusRoot = path.join(projectRoot, "benchmark/corpus/python");
 const suppliedOutput = process.argv.find(item => item.startsWith("--output="))?.slice("--output=".length);
 const outputRoot = suppliedOutput ? path.resolve(suppliedOutput) : path.join(projectRoot, ".workspace/acceptance/semantic-preview");
+if (suppliedOutput && existsSync(outputRoot)) throw new Error("Explicit output must be a new directory; existing frozen preview is preserved");
 const storePath = path.join(outputRoot, "preview.sqlite");
 const excludedDirectories = new Set(["tests", "__tests__", "benchmarks", "fixtures"]);
 const focusFile = "packages/zod/src/v3/helpers/parseUtil.ts";
@@ -221,8 +222,7 @@ const receipt = {
   },
 };
 
-rmSync(outputRoot, { recursive: true, force: true });
-if (suppliedOutput && existsSync(outputRoot)) throw new Error("Explicit output must be a new directory; existing frozen preview is preserved");
+if (!suppliedOutput) rmSync(outputRoot, { recursive: true, force: true });
 mkdirSync(outputRoot, { recursive: true });
 const store = new SqliteSnapshotStore(storePath);
 try {
