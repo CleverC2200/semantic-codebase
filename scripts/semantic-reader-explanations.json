@@ -19,7 +19,59 @@
           ],
           "output": "返回 ZodIssue，包含问题代码、完整路径和消息。",
           "logic": "先合并路径；若 issueData.message 已给定则直接使用；否则按处理后的映射列表逐层计算消息。",
-          "example": "传入自定义 message 时，返回的问题会保留该消息。"
+          "example": "传入自定义 message 时，返回的问题会保留该消息。",
+          "steps": [
+            {
+              "match": "return {\n    ...issueData,\n    path: fullPath,\n    message: errorMessage,\n  };",
+              "title": "返回最终错误对象",
+              "description": "组合原问题字段、完整路径和最终消息，结束函数。"
+            },
+            {
+              "match": "maps",
+              "title": "逐个执行错误映射器",
+              "description": "遍历 maps，每次迭代进入下一步；处理完后返回最终问题。"
+            },
+            {
+              "match": "errorMessage = map(fullIssue, { data, defaultError: errorMessage }).message;",
+              "title": "更新本轮错误消息",
+              "description": "把完整问题、原始数据和上一轮消息交给 map，以返回的 message 更新 errorMessage。"
+            },
+            {
+              "match": "const maps = errorMaps\n    .filter((m) => !!m)\n    .slice()\n    .reverse();",
+              "title": "整理映射器顺序",
+              "description": "过滤空映射器，复制数组后反转顺序；不会改动传入的 errorMaps 数组。"
+            },
+            {
+              "match": "let errorMessage = \"\";",
+              "title": "准备消息初值",
+              "description": "把 errorMessage 设为空字符串，作为第一次错误映射的默认消息。"
+            },
+            {
+              "match": "issueData.message !== undefined",
+              "title": "是否已有自定义消息",
+              "description": "有 message 时直接返回；没有 message 时进入下方的映射计算。"
+            },
+            {
+              "match": "return {\n      ...issueData,\n      path: fullPath,\n      message: issueData.message,\n    };",
+              "title": "直接返回自定义消息",
+              "description": "保留传入的消息并写入完整路径，提前结束函数，不再执行错误映射。"
+            },
+            {
+              "match": "const fullIssue = {\n    ...issueData,\n    path: fullPath,\n  };",
+              "title": "组装映射器的输入",
+              "description": "保留 issueData 的字段，并将 path 替换为完整路径 fullPath。"
+            },
+            {
+              "match": "const fullPath = [...path, ...(issueData.path || [])];",
+              "title": "拼接完整错误路径",
+              "description": "在当前 path 后追加 issueData.path；没有附加路径时使用空数组。"
+            },
+            {
+              "match": "const { data, path, errorMaps, issueData } = params;",
+              "title": "取出输入信息",
+              "description": "从 params 取出数据、当前路径、错误映射列表和原始问题，供后续步骤使用。"
+            }
+          ]
         },
         "addIssueToContext": {
           "purpose": "生成一条错误并追加到当前解析上下文，让上层统一收集失败原因。",

@@ -24,6 +24,15 @@ test('capability navigation separates hierarchy and shared use without losing un
   assert.deepEqual(m.ancestors('users').map((x: { id: string }) => x.id), ['system']);
 });
 
+test('stale module sources return their definitions to unassigned rather than retaining candidate coverage', () => {
+  const data = fixture();
+  data.files[0].source_digest = 'changed';
+  const m = createReaderCapabilityModel(data);
+  assert.deepEqual(m.members('system'), []);
+  assert.deepEqual(m.unassigned().sort(), ['run', 'shared', 'unknown']);
+  assert.equal(m.get('audit').available, false);
+});
+
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

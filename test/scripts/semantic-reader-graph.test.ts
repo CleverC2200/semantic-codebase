@@ -190,3 +190,16 @@ test('direct calls retain class identity and data view includes extracted file a
   assert.equal(model.functionCalls('run').nodes.find((n: { id: string }) => n.id === 'Box').kind, 'definition');
   assert.deepEqual(model.dataFlow('run').writes.map((f: { value: { effect_kind: string } }) => f.value.effect_kind), ['file', 'process']);
 });
+
+test('vertical logic pairs source-ordered steps with verified source and retains branch and loop destinations', () => {
+  const source = 'prepare();\nready\nfinish();';
+  const model = (verified: boolean) => createReaderGraphModel({ definitions: [def('run')], files: [{ path:'a.ts', verified, source, source_digest:'hash' }], evidence: {
+    a: { file_path:'a.ts', source_digest:'hash', span:{start_byte:0,end_byte:10} }, b:{ file_path:'a.ts', source_digest:'hash', span:{start_byte:11,end_byte:16} }, c:{file_path:'a.ts',source_digest:'hash',span:{start_byte:17,end_byte:26}},
+  }, facts: [{kind:'control_flow',subject:{definition_key:'run'},value:{entry:0,exit:1,blocks:[{id:0,kind:'entry'},{id:1,kind:'exit'},{id:2,kind:'statement',evidence_id:'a',source_excerpt:'prepare();'},{id:3,kind:'condition',evidence_id:'b',source_excerpt:'ready'},{id:4,kind:'return',evidence_id:'c',source_excerpt:'finish();'}],edges:[{from:0,to:2,kind:'next'},{from:2,to:3,kind:'next'},{from:3,to:4,kind:'true'},{from:3,to:2,kind:'false'},{from:4,to:1,kind:'return'}]}}] });
+  const result = model(true).logicSteps('run');
+  assert.equal(result.orientation, 'vertical');
+  assert.deepEqual(result.nodes.map((n: { source: string }) => n.source), ['prepare();','ready','finish();']);
+  assert.equal(result.edges.filter((e: { from: string }) => e.from === 'block:3').length, 2);
+  assert.equal(result.nodes[1].sourceLine, 2);
+  assert.ok(model(false).logicSteps('run').nodes.every((n: { source: unknown }) => n.source === null));
+});
