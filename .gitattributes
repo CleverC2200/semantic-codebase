@@ -1,0 +1,2 @@
+# Unified diff context and reviewed upstream whitespace are part of this patch payload.
+/scripts/archify-oa-desktop/renderer.patch -whitespace

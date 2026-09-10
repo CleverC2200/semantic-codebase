@@ -1,0 +1,656 @@
+--- a/assets/template.html
++++ b/assets/template.html
+@@ -166,3 +166,4 @@
+       unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+-  </style>
++  
++</style>
+   <style>
+@@ -823,3 +824,3 @@
+     html[data-preset="editorial"] h1,
+-    html[data-preset="editorial"] .card h3 {
++    html[data-preset="editorial"] .card h2 {
+       font-family: Georgia, 'Times New Roman', 'Songti SC', STSong, serif;
+@@ -1688,3 +1689,3 @@
+       overflow: hidden;
+-      min-height: 1.75rem !important;
++      min-height: 44px !important;
+       padding: 0.22rem 0.38rem;
+@@ -1694,3 +1695,3 @@
+       color: var(--text);
+-      font-size: 0.56rem;
++      font-size: 13px;
+       font-weight: 700;
+@@ -3075,3 +3076,3 @@
+ 
+-    .card h3 { font-size: 0.875rem; font-weight: 600; color: var(--text); }
++    .card h2 { font-size: 0.875rem; font-weight: 600; color: var(--text); }
+ 
+@@ -4223,3 +4224,3 @@
+       fill: var(--backend-stroke);
+-      font-size: 5.5px;
++      font-size: 11px;
+       font-weight: 800;
+@@ -4975,2 +4976,181 @@
+   </style>
++<style id="oa-reading-refinements">
++/* Local reading refinements. Semantic geometry and evidence remain renderer-owned. */
++:root { --oa-ui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; --oa-focus: var(--frontend-stroke); }
++body { font-family: var(--oa-ui-font); }
++code, kbd, pre, .semantic-passport-source small, .semantic-passport-repository { font-family: 'JetBrains Mono', ui-monospace, monospace; }
++::selection { background: color-mix(in srgb, var(--frontend-fill) 65%, var(--bg)); color: var(--text); }
++:focus-visible { outline: 2px solid var(--oa-focus); outline-offset: 3px; }
++input { caret-color: var(--oa-focus); }
++.diagram-nav { gap: 4px; overflow: visible; padding: 4px; background: var(--toolbar-bg); backdrop-filter: none; }
++.diagram-nav button { flex: 0 0 auto; min-width: 44px; height: 44px; font-size: 13px; white-space: nowrap; color: var(--toolbar-text); padding-inline: 10px; }
++.diagram-nav #btn-route-probe, .diagram-nav #btn-overview-map, .diagram-nav #btn-semantic-lens { min-width: 64px; color: var(--toolbar-text); }
++.diagram-nav [data-view="reset"] { min-width: 66px; }
++.diagram-nav-icon { width: 16px; height: 16px; }
++#btn-node-finder { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
++#btn-node-finder .diagram-nav-icon { margin: 0; }
++.oa-tools-extra { position: absolute; right: 0; bottom: calc(100% + 8px); display: flex; gap: 4px; padding: 6px; border: 1px solid var(--toolbar-border); border-radius: 8px; background: var(--toolbar-bg); box-shadow: 0 8px 20px rgb(0 0 0 / 14%); }
++.oa-tools-extra[hidden] { display: none; }
++#oa-tools-more[aria-expanded="true"] { background: var(--toolbar-hover); }
++.oa-reading-help { margin: 10px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
++.oa-reading-help kbd { font-size: 12px; }
++.card h2 { font-size: 15px; font-weight: 600; color: var(--text); }
++.card li { font-size: 13px; line-height: 1.65; }
++.focus-chip { width: min(430px, calc(100% - 32px)); max-height: min(640px, calc(100% - 80px)); scrollbar-color: var(--toolbar-border) var(--panel); }
++.focus-chip button { min-height: 40px; font-size: 13px; }
++.relationship-lens-actions #btn-focus-clear { width: 44px; height: 44px; }
++.relationship-lens-title { font-size: 17px; white-space: normal; overflow-wrap: anywhere; }
++.semantic-passport-detail { font-size: 14px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
++.semantic-passport-meta span, .semantic-passport-meta code { font-size: 12px; letter-spacing: normal; }
++.semantic-passport-evidence-head { align-items: flex-start; flex-direction: column; }
++.semantic-passport-evidence-status { font-size: 12px; letter-spacing: normal; }
++.semantic-passport-repository { max-width: 100%; font-size: 12px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; overflow: visible; }
++.semantic-passport-source { padding: 8px 0; gap: 5px 8px; }
++.semantic-passport-source strong { font-size: 14px; white-space: normal; overflow-wrap: anywhere; }
++.semantic-passport-source code { font-size: 12px; }
++.semantic-passport-source small { font-size: 12px; line-height: 1.55; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
++.semantic-passport-reach-label, .semantic-passport-reach-status, .relationship-lens-summary, .relationship-lens-group-title { font-size: 12px; line-height: 1.5; letter-spacing: normal; }
++.relationship-lens-row, .relationship-lens-row strong { font-size: 13px; }
++.relationship-lens-row small { font-size: 12px; }
++.relationship-lens-head { background: var(--panel); }
++.oa-copy-source { border: 1px solid var(--toolbar-border) !important; margin-top: 8px; color: var(--text); }
++.oa-copy-status { min-height: 1.5em; margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
++.node-finder { width: min(400px, calc(100% - 32px)); }
++.node-finder-head strong { font-size: 16px; }
++.node-finder-close { width: 44px; height: 44px; }
++.node-finder-input { font-size: 16px; min-width: 0; }
++.node-finder-result { min-height: 56px; }
++.node-finder-result strong { font-size: 14px; }
++.node-finder-result small { font-size: 12px; white-space: normal; }
++.node-finder-result em, .node-finder-status, .node-finder-empty { font-size: 12px; line-height: 1.5; }
++.oa-clear-search { flex: 0 0 auto; border: 0; border-radius: 6px; background: var(--toolbar-hover); color: var(--text); min-height: 44px; padding: 0 10px; font: inherit; font-size: 13px; cursor: pointer; }
++.oa-clear-search[hidden] { display: none; }
++.oa-graph-region:focus-visible { outline-offset: 4px; }
++@media (max-width: 720px) {
++  body { padding: 16px; }
++  .toolbar { margin: 0 0 16px; width: 100%; justify-content: flex-start; }
++  .header { margin-bottom: 16px; }
++  .header h1 { font-size: 21px; line-height: 1.3; }
++  .diagram-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; left: 12px; right: 12px; bottom: 12px; max-width: none; }
++  .diagram-nav > button { width: 100%; min-width: 0; margin: 0 !important; padding-inline: 6px; }
++  .diagram-nav #btn-node-finder { order: -3; }
++  .diagram-nav [data-view="reset"] { order: -2; min-width: 0; }
++  .diagram-nav #oa-tools-more { order: -1; }
++  .diagram-nav #btn-node-finder::before, .diagram-nav [data-view="out"]::before { display: none; }
++  html:not([data-embed="true"]) .diagram-container { padding-bottom: 124px; }
++  .focus-chip { left: 8px; right: 8px; width: auto; max-width: none; max-height: min(65vh, calc(100% - 132px)); }
++  .relationship-lens-head { padding: 12px; gap: 8px; }
++  .relationship-lens-actions { gap: 6px; }
++  .semantic-passport-evidence { padding: 8px; }
++  .card li { line-height: 1.7; }
++  .node-finder { left: 8px; width: calc(100% - 16px); max-height: calc(100% - 132px); }
++}
++@media (prefers-reduced-motion: reduce) { .oa-graph-region { scroll-behavior: auto !important; } }
++
++/* Keep long provenance fully reachable without crossing the navigation dock. */
++.focus-chip { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
++.relationship-lens-actions #btn-focus-copy { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
++html[data-theme="light"] .semantic-passport-evidence-status, html[data-theme="light"] .semantic-passport-source code { color: #047857; }
++.semantic-passport-meta [data-passport="kind"] { color: var(--text); }
++@media (max-width: 720px) {
++ .relationship-lens-head { display: flex; flex-direction: column; }
++ .relationship-lens-copy { width: 100%; }
++ .relationship-lens-actions { order: -1; align-self: stretch; flex-direction: row; align-items: center; justify-content: flex-end; }
++ .relationship-lens-actions #btn-focus-clear { order: 1; }
++}
++
++@media (max-width: 720px) { .focus-chip { top: 8px !important; bottom: auto !important; } }
++
++</style>
++<style>
++/* Second-pass reading and touch corrections. */
++.focus-chip button { min-width: 44px; min-height: 44px; }
++.preset-menu-heading, .preset-menu-heading span:last-child { font-size: 12px; letter-spacing: normal; color: var(--text-muted); }
++.preset-option-copy strong { font-size: 14px; }
++.preset-option-copy small { font-size: 12px; line-height: 1.45; white-space: normal; overflow: visible; color: var(--text-muted); }
++.toolbar .preset-option { min-height: 64px; }
++.export-option-copy small, .export-menu-hint { font-size: 12px; line-height: 1.45; }
++.source-evidence-beacon { opacity: 1; }
++@media (max-width: 720px) { .oa-graph-region > svg { min-width: 1120px !important; } }
++
++</style>
++<style>
++/* Readable controls stay outside the SVG camera. The SVG remains the overview. */
++:root {
++  --oa-graph-secondary: #cbd5e1;
++  --oa-source-text: #6ee7b7;
++}
++html[data-theme="light"] {
++  --oa-graph-secondary: #334155;
++  --oa-source-text: #047857;
++}
++.oa-graph-region > svg .t-muted { fill: var(--oa-graph-secondary); }
++html[data-theme="light"] .oa-graph-region [data-node-kind="backend"] .t-muted { fill: #065f46; }
++html[data-theme="light"] .oa-graph-region [data-node-kind="security"] .t-muted { fill: #881337; }
++html[data-theme="light"] .oa-graph-region [data-node-kind="database"] .t-muted { fill: #5b21b6; }
++.oa-graph-region .source-evidence-beacon text { fill: var(--oa-source-text); }
++.oa-graph-region > svg [data-legend] { display: none; }
++#focus-reach-upstream-count, #focus-reach-downstream-count { font-size: 12px; }
++.oa-reading-tools { margin: 8px 0; color: var(--text); font: 14px/1.5 var(--oa-ui-font); }
++.oa-reading-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
++.oa-reading-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
++.oa-reading-tools button, .oa-reading-tools summary {
++  min-width: 44px; min-height: 44px; padding: 8px 12px;
++  border: 1px solid var(--toolbar-border); border-radius: 6px;
++  background: var(--panel); color: var(--text); font: inherit; cursor: pointer;
++}
++.oa-reading-tools button:hover, .oa-reading-tools summary:hover { background: var(--toolbar-hover); }
++.oa-reading-tools button[aria-pressed="true"] { border-color: var(--backend-stroke); background: var(--backend-fill); }
++.oa-reading-tools button:focus-visible, .oa-reading-tools summary:focus-visible { outline: 2px solid var(--oa-focus); outline-offset: 2px; }
++.oa-reading-tools button:disabled { cursor: default; opacity: .6; }
++.oa-kind-count { margin-left: 8px; font-variant-numeric: tabular-nums; }
++.oa-kind-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 7px; border-radius: 2px; background: var(--oa-kind-color); }
++.oa-text-reading { margin-left: auto; }
++.oa-text-reading summary { list-style-position: inside; }
++.oa-text-reading[open] { flex: 1 0 100%; margin-left: 0; }
++.oa-text-reading[open] summary { width: fit-content; }
++.oa-reading-content { margin: 12px 0; }
++.oa-reading-content [hidden] { display: none; }
++.oa-reading-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
++.oa-reading-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; }
++.oa-reading-list li { padding: 8px 0; border-bottom: 1px solid var(--panel-border); min-width: 0; }
++.oa-reading-list button { text-align: left; width: 100%; border: 0; padding: 8px; background: transparent; }
++.oa-reading-list strong, .oa-reading-list span { display: block; overflow-wrap: anywhere; }
++.oa-reading-list strong { font-weight: 600; }
++.oa-reading-list span { color: var(--text-muted); margin-top: 3px; }
++.oa-reading-caption { margin: 8px 0; color: var(--text-muted); font-size: 13px; }
++.diagram-guide-eyebrow, .diagram-guide-stats::before { display: none; }
++.diagram-guide-title { font-size: 18px; }
++.diagram-guide-stats, .diagram-guide-shortcuts, .diagram-guide-shortcuts kbd { font-size: 12px; line-height: 1.5; }
++.diagram-guide-actions { grid-template-columns: 1fr; gap: 6px; }
++.diagram-guide-action { grid-template-columns: minmax(0, 1fr); min-height: 66px; padding: 12px; }
++.diagram-guide-action strong { font-size: 15px; white-space: normal; }
++.diagram-guide-action small { display: block; font-size: 13px; line-height: 1.5; color: var(--text-muted); overflow: visible; }
++.diagram-guide-close { min-width: 44px; min-height: 44px; }
++.semantic-lens button { min-width: 44px; min-height: 44px; font-size: 13px; }
++.semantic-lens-title { font-size: 16px; }
++.semantic-lens-status, .semantic-lens-kind small { font-size: 12px; }
++html[data-present="true"] .oa-reading-tools { display: none; }
++@media (max-width: 720px) {
++  .oa-reading-kinds { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
++  .oa-reading-kinds button { width: 100%; text-align: left; }
++  .oa-text-reading { margin-left: 0; width: 100%; }
++  .oa-text-reading summary { width: 100%; }
++  .oa-reading-list { grid-template-columns: 1fr; }
++}
++
++/* Keep the newly promoted reading paths at the same control/text scale. */
++.semantic-lens-eyebrow { display: none; }
++.semantic-lens-instruction { font-size: 13px; line-height: 1.5; }
++.route-probe button { min-width: 44px; min-height: 44px; font-size: 13px; }
++.route-probe-title { font-size: 16px; }
++.route-probe-status { font-size: 12px; line-height: 1.5; }
++@media (max-width: 720px) {
++  .semantic-lens { top: 8px !important; bottom: auto !important; max-height: calc(100% - 132px); overflow-y: auto; }
++}
++
++.semantic-lens-kind strong { font-size: 14px; }
++.semantic-lens-kind em { font-size: 12px; }
++
++</style>
+ </head>
+@@ -5303,33 +5483,6 @@
+         <p class="diagram-guide-stats" id="diagram-guide-stats">{{i18n:viewer.guide.inspecting}}</p>
+-        <div class="diagram-guide-actions" id="diagram-guide-actions" role="group" aria-label="{{i18n:viewer.guide.actions}}">
+-          <button class="diagram-guide-action" type="button" data-guide-action="find" aria-label="{{i18n:viewer.guide.find}}">
+-            <span class="diagram-guide-index" aria-hidden="true">01</span>
+-            <span class="diagram-guide-action-copy"><strong>{{i18n:viewer.guide.find}}</strong><small>{{i18n:viewer.guide.find.hint}}</small></span>
+-            <kbd aria-hidden="true">/</kbd>
+-          </button>
+-          <button class="diagram-guide-action" type="button" data-guide-action="route" aria-label="{{i18n:viewer.guide.route.aria}}">
+-            <span class="diagram-guide-index" aria-hidden="true">02</span>
+-            <span class="diagram-guide-action-copy"><strong>{{i18n:viewer.guide.route}}</strong><small>{{i18n:viewer.guide.route.hint}}</small></span>
+-            <kbd aria-hidden="true">R</kbd>
+-          </button>
+-          <button class="diagram-guide-action" type="button" data-guide-action="map" aria-label="{{i18n:viewer.guide.map}}">
+-            <span class="diagram-guide-index" aria-hidden="true">03</span>
+-            <span class="diagram-guide-action-copy"><strong>{{i18n:viewer.guide.map}}</strong><small>{{i18n:viewer.guide.map.hint}}</small></span>
+-            <kbd aria-hidden="true">M</kbd>
+-          </button>
+-          <button class="diagram-guide-action" type="button" data-guide-action="lens" aria-label="{{i18n:viewer.guide.lens}}">
+-            <span class="diagram-guide-index" aria-hidden="true">04</span>
+-            <span class="diagram-guide-action-copy"><strong>{{i18n:viewer.guide.lens}}</strong><small>{{i18n:viewer.guide.lens.hint}}</small></span>
+-            <kbd aria-hidden="true">L</kbd>
+-          </button>
+-          <button class="diagram-guide-action" type="button" data-guide-action="story" aria-label="{{i18n:viewer.guide.story}}">
+-            <span class="diagram-guide-index" aria-hidden="true">05</span>
+-            <span class="diagram-guide-action-copy"><strong>{{i18n:viewer.guide.story}}</strong><small id="diagram-guide-story-copy">{{i18n:viewer.guide.story.hint}}</small></span>
+-            <kbd aria-hidden="true">P</kbd>
+-          </button>
+-          <button class="diagram-guide-action" type="button" data-guide-action="present" aria-label="{{i18n:viewer.present.enter}}">
+-            <span class="diagram-guide-index" aria-hidden="true">06</span>
+-            <span class="diagram-guide-action-copy"><strong>{{i18n:viewer.guide.present}}</strong><small>{{i18n:viewer.guide.present.hint}}</small></span>
+-            <kbd aria-hidden="true">F</kbd>
+-          </button>
++        <div class="diagram-guide-actions" id="diagram-guide-actions" role="group" aria-label="OA 阅读路径">
++          <button class="diagram-guide-action" type="button" data-guide-action="oa-mainline"><span class="diagram-guide-action-copy"><strong>看审批主线</strong><small>从授权调度沿控制器、深模块和唯一 Writer 读到 OA。</small></span></button>
++          <button class="diagram-guide-action" type="button" data-guide-action="find"><span class="diagram-guide-action-copy"><strong>查看模块来源</strong><small>按模块名称或职责查找，核对仓库、版本、文件和行号。</small></span></button>
++          <button class="diagram-guide-action" type="button" data-guide-action="oa-boundary"><span class="diagram-guide-action-copy"><strong>理解写入边界</strong><small>聚焦唯一 Writer，查看串行提交职责及其来源。</small></span></button>
+         </div>
+@@ -5354,6 +5507,6 @@
+       </div>
+-      <div class="focus-chip relationship-lens no-print" id="focus-chip" hidden role="region" aria-labelledby="relationship-lens-title">
++      <div class="focus-chip relationship-lens no-print" id="focus-chip" hidden tabindex="-1" role="region" aria-labelledby="relationship-lens-title">
+         <div class="relationship-lens-head">
+           <div class="relationship-lens-copy">
+-            <span class="relationship-lens-eyebrow">{{i18n:viewer.passport.eyebrow}}</span>
++            
+             <strong class="relationship-lens-title" id="relationship-lens-title"><span id="focus-label"></span></strong>
+@@ -7493,3 +7646,3 @@
+           var brandOffset = node.hasAttribute('data-node-brand') ? 24 : 0;
+-          beacon.setAttribute('transform', 'translate(' + (box.x + box.width - 35 - brandOffset) + ' ' + (box.y + 5) + ')');
++          beacon.setAttribute('transform', 'translate(' + (box.x + box.width - 59 - brandOffset) + ' ' + (box.y + 5) + ')');
+           var title = document.createElementNS(svgNamespace, 'title');
+@@ -7497,8 +7650,8 @@
+           var plate = document.createElementNS(svgNamespace, 'rect');
+-          plate.setAttribute('width', '30');
+-          plate.setAttribute('height', '12');
++          plate.setAttribute('width', '54');
++          plate.setAttribute('height', '18');
+           plate.setAttribute('rx', '6');
+           var text = document.createElementNS(svgNamespace, 'text');
+-          text.setAttribute('x', '15');
+-          text.setAttribute('y', '8.25');
++          text.setAttribute('x', '27');
++          text.setAttribute('y', '12.5');
+           text.textContent = viewerText('viewer.passport.sourceMarker') + ' ' + count;
+@@ -7863,2 +8016,4 @@
+       function renderSourceEvidence(id) {
++        var copyStatus = document.querySelector('.oa-copy-status');
++        if (copyStatus) copyStatus.textContent = '';
+         evidenceLinks.textContent = '';
+@@ -7873,3 +8028,3 @@
+         }
+-        repositoryLink.textContent = repository.label + ' @ ' + repository.shortRevision;
++        repositoryLink.textContent = repository.label + ' @ ' + repository.revision;
+         if (repository.href) {
+@@ -10989,3 +11144,4 @@
+           html.getAttribute('data-present') !== 'true' &&
+-          (!window.matchMedia || !window.matchMedia('print').matches)
++          (!window.matchMedia || !window.matchMedia('print').matches) &&
++          !document.querySelector('.oa-text-reading[open]')
+         );
+@@ -11048,3 +11204,4 @@
+         var fixedHeight = chrome.bodyY + chrome.diagramY + SAFE_BOTTOM_GAP +
+-          outerHeight(header) + outerHeight(guided) + outerHeight(cards);
++          outerHeight(header) + outerHeight(guided) + outerHeight(cards) +
++          outerHeight(document.querySelector('.oa-reading-tools'));
+         var availableSvgHeight = Math.max(1, window.innerHeight - fixedHeight);
+@@ -11202,2 +11359,3 @@
+           (!window.matchMedia || !window.matchMedia('print').matches) &&
++          !document.querySelector('.oa-text-reading[open]') &&
+           visible(nav)
+@@ -14677,5 +14835,7 @@
+         });
+-        storyBtn.disabled = views === 0;
+-        storyBtn.setAttribute('aria-disabled', views === 0 ? 'true' : 'false');
+-        storyCopy.textContent = views
++        if (storyBtn) {
++          storyBtn.disabled = views === 0;
++          storyBtn.setAttribute('aria-disabled', views === 0 ? 'true' : 'false');
++        }
++        if (storyCopy) storyCopy.textContent = views
+           ? viewerCount('viewer.guide.story.available', views)
+@@ -14731,2 +14891,12 @@
+         close({ restoreFocus: false });
++        if (action === 'oa-mainline') {
++          Archify.routeProbe.begin({ source: 'entry', focusNode: false });
++          return Archify.routeProbe.choose('oa');
++        }
++        if (action === 'oa-boundary') {
++          var writer = document.getElementById('node-writer');
++          var focused = Archify.focus.set('writer', { toggle: false });
++          if (writer) writer.focus({ preventScroll: true });
++          return focused;
++        }
+         if (action === 'find') return Archify.finder.open();
+@@ -14800,3 +14970,3 @@
+       document.addEventListener('click', function (event) {
+-        if (!panel.hidden && !panel.contains(event.target) && event.target !== trigger) close({ restoreFocus: false });
++        if (!panel.hidden && !panel.contains(event.target) && !trigger.contains(event.target)) close({ restoreFocus: false });
+       });
+@@ -14909,2 +15079,179 @@
+   </script>
++<script>
++(() => {
++  const nav=document.querySelector('.diagram-nav'), graph=document.querySelector('.diagram-container');
++  document.querySelector('.header').after(document.querySelector('.toolbar'));
++  const extra=document.createElement('div');extra.id='oa-tools-extra';extra.className='oa-tools-extra';extra.hidden=true;extra.setAttribute('role','group');extra.setAttribute('aria-label','其他图表工具');
++  const more=document.createElement('button');more.id='oa-tools-more';more.type='button';more.textContent='更多工具';more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls',extra.id);
++  for(const id of ['btn-route-probe','btn-overview-map','btn-semantic-lens'])extra.append(document.getElementById(id));
++  nav.append(more,extra);
++  const close=()=>{extra.hidden=true;more.setAttribute('aria-expanded','false');};
++  more.addEventListener('click',()=>{extra.hidden=!extra.hidden;more.setAttribute('aria-expanded',String(!extra.hidden));});
++  extra.addEventListener('click',e=>{if(e.target.closest('button'))close();});
++  document.addEventListener('click',e=>{if(!nav.contains(e.target))close();});
++  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!extra.hidden){e.preventDefault();e.stopImmediatePropagation();close();more.focus();}},true);
++  const find=document.getElementById('btn-node-finder'),label=document.createElement('span');label.textContent='查找';find.append(label);
++  graph.classList.add('oa-graph-region');graph.tabIndex=0;graph.setAttribute('role','region');graph.setAttribute('aria-label','OA 架构图，可横向滚动；点击模块查看来源');
++  const help=document.createElement('p');help.className='oa-reading-help';help.innerHTML='点击模块查看来源；按 <kbd>/</kbd> 查找，按 <kbd>Esc</kbd> 返回。窄屏可横向滑动图面。';document.querySelector('.header').append(help);
++  const input=document.getElementById('node-finder-input'),clear=document.createElement('button');clear.className='oa-clear-search';clear.type='button';clear.textContent='清空';clear.setAttribute('aria-label','清空搜索');clear.hidden=!input.value;input.parentElement.append(clear);
++  const sync=()=>{clear.hidden=!input.value;};input.addEventListener('input',sync);clear.addEventListener('click',()=>{input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();});
++  const evidence=document.getElementById('focus-evidence'),copy=document.createElement('button'),status=document.createElement('p');copy.className='oa-copy-source';copy.type='button';copy.textContent='复制源码位置';status.className='oa-copy-status';status.setAttribute('role','status');evidence.append(copy,status);
++  copy.addEventListener('click',async()=>{const repository=Archify.sourceEvidence.repository();const id=document.getElementById('focus-id').textContent;const sources=Archify.sourceEvidence.node(id);const text=[repository.label+' @ '+repository.revision,...sources.map(s=>s.path+(s.line?':'+s.line:''))].join('\n');try{await navigator.clipboard.writeText(text);status.textContent='已复制仓库、版本和源码位置。';}catch{status.textContent='复制受限，请选中上方来源信息复制。';}});
++})();
++
++</script>
++<script>
++(() => {
++  const graph = document.querySelector('.diagram-container');
++  const svg = graph.querySelector(':scope > svg');
++  if (!svg || document.documentElement.dataset.embed === 'true') return;
++  const legend = svg.querySelector('[data-legend]');
++  if (legend) legend.setAttribute('aria-hidden', 'true');
++  const nodes = [...svg.querySelectorAll('[data-node-id]')];
++  const nodeById = new Map(nodes.map(node => [node.dataset.nodeId, node]));
++  const edges = [...new Map([...svg.querySelectorAll('[data-edge-id]')]
++    .map(edge => [edge.dataset.edgeId, edge])).values()];
++  const section = document.createElement('section');
++  section.className = 'oa-reading-tools no-print';
++  section.setAttribute('aria-label', '图例与文字阅读');
++  const bar = document.createElement('div');
++  bar.className = 'oa-reading-bar';
++  const kinds = document.createElement('div');
++  kinds.className = 'oa-reading-kinds';
++  kinds.setAttribute('role', 'group');
++  kinds.setAttribute('aria-label', '按类型查看模块');
++  const kindButtons = [];
++  for (const entry of svg.querySelectorAll('[data-legend-kind]')) {
++    const kind = entry.dataset.legendKind;
++    const label = entry.dataset.legendLabel || kind;
++    const count = nodes.filter(node => node.dataset.nodeKind === kind).length;
++    const button = document.createElement('button');
++    button.type = 'button';
++    button.dataset.oaKind = kind;
++    button.setAttribute('aria-pressed', 'false');
++    button.setAttribute('aria-controls', 'semantic-lens');
++    button.setAttribute('aria-expanded', 'false');
++    button.setAttribute('aria-label', `查看${label}，${count}个模块`);
++    const swatch = document.createElement('span');
++    swatch.className = 'oa-kind-swatch';
++    swatch.style.setProperty('--oa-kind-color', `var(--${kind}-stroke)`);
++    swatch.setAttribute('aria-hidden', 'true');
++    const countLabel = document.createElement('span');
++    countLabel.className = 'oa-kind-count';
++    countLabel.textContent = String(count);
++    countLabel.setAttribute('aria-hidden', 'true');
++    button.append(swatch, document.createTextNode(label), countLabel);
++    button.addEventListener('click', event => {
++      event.stopPropagation();
++      if (window.matchMedia('(max-width: 720px)').matches) graph.scrollIntoView({ block: 'start', behavior: 'instant' });
++      Archify.semanticLens.select(kind);
++      Archify.semanticLens.open({ opener: button });
++      syncKinds();
++    });
++    kinds.append(button);
++    kindButtons.push(button);
++  }
++  function syncKinds() {
++    const selected = Archify.semanticLens.active() || [];
++    const open = Archify.semanticLens.isOpen();
++    for (const button of kindButtons) {
++      const active = selected.includes(button.dataset.oaKind);
++      button.setAttribute('aria-pressed', String(active));
++      button.setAttribute('aria-expanded', String(open && active));
++      button.disabled = selected.length >= 2 && !active;
++    }
++  }
++  new MutationObserver(syncKinds).observe(document.getElementById('semantic-lens'), {
++    attributes: true, attributeFilter: ['hidden', 'data-dock-side']
++  });
++  new MutationObserver(syncKinds).observe(svg, {
++    attributes: true, attributeFilter: ['data-lens-active']
++  });
++  window.addEventListener('hashchange', syncKinds);
++
++  const reading = document.createElement('details');
++  reading.className = 'oa-text-reading';
++  const summary = document.createElement('summary');
++  summary.textContent = '文字阅读';
++  summary.setAttribute('aria-label', `文字阅读：${nodes.length}个模块、${edges.length}条关系`);
++  const content = document.createElement('div');
++  content.className = 'oa-reading-content';
++  const tabs = document.createElement('div');
++  tabs.className = 'oa-reading-tabs';
++  tabs.setAttribute('role', 'group');
++  tabs.setAttribute('aria-label', '选择文字内容');
++  const nodeList = document.createElement('ul');
++  nodeList.className = 'oa-reading-list';
++  nodeList.id = 'oa-reading-nodes';
++  const edgeList = document.createElement('ul');
++  edgeList.className = 'oa-reading-list';
++  edgeList.id = 'oa-reading-edges';
++  edgeList.hidden = true;
++  function makeTab(label, list, other) {
++    const button = document.createElement('button');
++    button.type = 'button';
++    button.textContent = label;
++    button.setAttribute('aria-controls', list.id);
++    button.setAttribute('aria-pressed', String(!list.hidden));
++    button.addEventListener('click', () => {
++      list.hidden = false;
++      other.hidden = true;
++      for (const item of tabs.children) item.setAttribute('aria-pressed', String(item === button));
++    });
++    return button;
++  }
++  tabs.append(makeTab(`模块 ${nodes.length}`, nodeList, edgeList), makeTab(`关系 ${edges.length}`, edgeList, nodeList));
++  function row(list, title, detail, action) {
++    const item = document.createElement('li');
++    const button = document.createElement('button');
++    button.type = 'button';
++    const strong = document.createElement('strong');
++    strong.textContent = title;
++    const description = document.createElement('span');
++    description.textContent = detail;
++    button.append(strong, description);
++    button.addEventListener('click', () => {
++      reading.open = false;
++      action();
++      requestAnimationFrame(() => graph.scrollIntoView({ block: 'nearest', behavior: 'instant' }));
++    });
++    item.append(button);
++    list.append(item);
++  }
++  for (const node of nodes) {
++    const id = node.dataset.nodeId;
++    const sources = Archify.sourceEvidence.node(id);
++    row(nodeList, node.dataset.nodeLabel, `${node.dataset.nodeSublabel || ''} · 来源 ${sources.length}`, () => {
++      Archify.focus.set(id, { toggle: false });
++      node.focus({ preventScroll: true });
++    });
++  }
++  for (const edge of edges) {
++    const from = nodeById.get(edge.dataset.edgeFrom);
++    const to = nodeById.get(edge.dataset.edgeTo);
++    if (!from || !to) continue;
++    row(edgeList, `${from.dataset.nodeLabel} → ${to.dataset.nodeLabel}`, edge.dataset.edgeLabel || '有向关系', () => {
++      Archify.focus.inspectRelationshipById(edge.dataset.edgeId, { toggle: false });
++      document.getElementById('focus-chip').focus({ preventScroll: true });
++    });
++  }
++  const caption = document.createElement('p');
++  caption.className = 'oa-reading-caption';
++  caption.textContent = '与图中模块、职责和关系一致；选择一项查看详情和来源。';
++  content.append(tabs, caption, nodeList, edgeList);
++  reading.append(summary, content);
++  bar.append(kinds, reading);
++  section.append(bar);
++  graph.after(section);
++  reading.addEventListener('keydown', event => {
++    if (event.key !== 'Escape') return;
++    event.preventDefault();
++    event.stopPropagation();
++    reading.open = false;
++    summary.focus();
++  });
++  syncKinds();
++})();
++
++</script>
+ </body>
+--- a/renderers/architecture/render-architecture.mjs
++++ b/renderers/architecture/render-architecture.mjs
+@@ -45,4 +45,4 @@
+ const componentTextFit = {
+-  sublabelPreferred: 9,
+-  sublabelMinimum: 6,
++  sublabelPreferred: 14,
++  sublabelMinimum: 13,
+   tagPreferred: 7,
+@@ -570,3 +570,3 @@
+     const [lx, ly] = labelPoint(conn, pathFor(conn).points);
+-    const w = Math.max(30, textUnits(conn.label) * 4.8 + 10);
++    const w = Math.max(30, textUnits(conn.label) * 7.2 + 10);
+     labelRects.push({ relation: conn, relationIndex: connectionIndex, label: conn.label, x: lx - w / 2, y: ly - 10, width: w, height: 14, lx, ly });
+@@ -610,3 +610,3 @@
+     const [lx, ly] = labelPoint(conn, pathFor(conn).points);
+-    const w = Math.max(30, textUnits(conn.label) * 4.8 + 10);
++    const w = Math.max(30, textUnits(conn.label) * 7.2 + 10);
+     labels.push({
+@@ -973,6 +973,6 @@
+   const [lx, ly] = labelPoint(conn, pathFor(conn).points);
+-  const w = Math.max(30, textUnits(conn.label) * 4.8 + 10);
++  const w = Math.max(30, textUnits(conn.label) * 7.2 + 10);
+   return `        <g data-detail="context" ${focusEdgeAttrs(conn.from, conn.to, conn.label, index, conn.id)}>
+           <rect x="${lx - w / 2}" y="${ly - 10}" width="${w}" height="14" rx="3" class="c-mask"/>
+-          <text x="${lx}" y="${ly}" class="${variantAccent(conn.variant)}" font-size="8" text-anchor="middle">${esc(conn.label)}</text>
++          <text x="${lx}" y="${ly}" class="${variantAccent(conn.variant)}" font-size="12" text-anchor="middle">${esc(conn.label)}</text>
+         </g>`;
+@@ -993,3 +993,3 @@
+   const brand = renderBrandMark(c, { x: c.x + c.width - 22, y: c.y + 6 });
+-  const labelFontSize = fittedNodeFontSize(c.label, brandLabelFitWidth(c, c.width), 11, 8);
++  const labelFontSize = fittedNodeFontSize(c.label, brandLabelFitWidth(c, c.width), 17, 15);
+   const passport = { kind: c.type, sublabel: c.sublabel, tag: c.tag, context: componentContext(c), ...brandMetadataFor(c) };
+--- a/renderers/shared/cli.mjs
++++ b/renderers/shared/cli.mjs
+@@ -157,3 +157,3 @@
+   const advisory = requestedProfile ? '' : ' data-quality-gates="advisory"';
+-  return `role="img" lang="${esc(resolveLocale(meta.locale))}" aria-labelledby="archify-diagram-title archify-diagram-description"${animation}${preset}${engineeringProfile} data-quality-profile="${esc(qualityProfile)}"${advisory}`;
++  return `role="group" lang="${esc(resolveLocale(meta.locale))}" aria-labelledby="archify-diagram-title archify-diagram-description"${animation}${preset}${engineeringProfile} data-quality-profile="${esc(qualityProfile)}"${advisory}`;
+ }
+--- a/renderers/shared/i18n.mjs
++++ b/renderers/shared/i18n.mjs
+@@ -64,3 +64,3 @@
+   'viewer.kind.backend': ['Backend', '后端'],
+-  'viewer.kind.database': ['Database', '数据库'],
++  'viewer.kind.database': ['Database', '本地存储'],
+   'viewer.kind.cloud': ['Cloud', '云服务'],
+@@ -160,3 +160,3 @@
+   'viewer.export.routeRequired': ['Trace a route before exporting a Route Share Card', '请先追踪路径，再导出路径分享卡片'],
+-  'viewer.export.reachRequired': ['Trace authored reach before exporting a Reach Share Card', '请先追踪编写可达范围，再导出可达范围分享卡片'],
++  'viewer.export.reachRequired': ['Trace authored reach before exporting a Reach Share Card', '请先追踪图中可达范围，再导出可达范围分享卡片'],
+   'viewer.export.unknown': ['unknown', '未知错误'],
+@@ -205,3 +205,3 @@
+   'viewer.guided.views': ['Guided views', '引导视图'],
+-  'viewer.guided.explore': ['Explore this system', '探索此系统'],
++  'viewer.guided.explore': ['Explore this system', '阅读这张 OA 架构图'],
+   'viewer.guided.intro': ['Step through curated paths without changing the source diagram.', '沿精选路径逐步查看，而不改变源图表。'],
+@@ -305,3 +305,3 @@
+   'viewer.guide.shortcut.close': ['Close', '关闭'],
+-  'viewer.guide.facts': ['{nodes} · {relationships} · {views}', '{nodes} · {relationships} · {views}'],
++  'viewer.guide.facts': ['{nodes} · {relationships} · {views}', '{nodes} · {relationships}'],
+   'viewer.guide.fact.node.one': ['{count} semantic node', '{count} 个语义节点'],
+@@ -338,3 +338,3 @@
+ 
+-  'viewer.passport.eyebrow': ['Semantic passport', '语义护照'],
++  'viewer.passport.eyebrow': ['Semantic passport', '节点详情'],
+   'viewer.passport.metadata': ['Node metadata', '节点元数据'],
+@@ -343,9 +343,9 @@
+   'viewer.passport.verificationScope': ['Verified against local Git at the pinned revision. Remote access has not been checked.', '已按固定修订版本验证本地 Git 证据，未检查远程访问权限。'],
+-  'viewer.passport.reach': ['Authored reach', '编写可达范围'],
+-  'viewer.passport.reach.trace': ['Trace authored reachability', '追踪编写的可达性'],
++  'viewer.passport.reach': ['Authored reach', '图中可达范围'],
++  'viewer.passport.reach.trace': ['Trace authored reachability', '追踪图中可达性'],
+   'viewer.passport.upstream': ['Upstream', '上游'],
+   'viewer.passport.downstream': ['Downstream', '下游'],
+-  'viewer.passport.upstream.trace': ['Trace upstream authored reachability', '追踪上游编写可达性'],
+-  'viewer.passport.downstream.trace': ['Trace downstream authored reachability', '追踪下游编写可达性'],
+-  'viewer.passport.close': ['Close semantic passport', '关闭语义护照'],
++  'viewer.passport.upstream.trace': ['Trace upstream authored reachability', '追踪上游图中可达性'],
++  'viewer.passport.downstream.trace': ['Trace downstream authored reachability', '追踪下游图中可达性'],
++  'viewer.passport.close': ['Close semantic passport', '关闭节点详情'],
+   'viewer.passport.copy': ['Copy link', '复制链接'],
+@@ -393,8 +393,8 @@
+   'viewer.passport.source.openLink': ['Open ↗', '打开 ↗'],
+-  'viewer.passport.reach.upstream.one': ['Trace {count} upstream authored node', '追踪 {count} 个上游编写节点'],
+-  'viewer.passport.reach.upstream.other': ['Trace {count} upstream authored nodes', '追踪 {count} 个上游编写节点'],
+-  'viewer.passport.reach.downstream.one': ['Trace {count} downstream authored node', '追踪 {count} 个下游编写节点'],
+-  'viewer.passport.reach.downstream.other': ['Trace {count} downstream authored nodes', '追踪 {count} 个下游编写节点'],
+-  'viewer.passport.reach.noUpstream': ['No upstream authored nodes', '没有上游编写节点'],
+-  'viewer.passport.reach.noDownstream': ['No downstream authored nodes', '没有下游编写节点'],
++  'viewer.passport.reach.upstream.one': ['Trace {count} upstream authored node', '追踪 {count} 个上游图中节点'],
++  'viewer.passport.reach.upstream.other': ['Trace {count} upstream authored nodes', '追踪 {count} 个上游图中节点'],
++  'viewer.passport.reach.downstream.one': ['Trace {count} downstream authored node', '追踪 {count} 个下游图中节点'],
++  'viewer.passport.reach.downstream.other': ['Trace {count} downstream authored nodes', '追踪 {count} 个下游图中节点'],
++  'viewer.passport.reach.noUpstream': ['No upstream authored nodes', '没有上游图中节点'],
++  'viewer.passport.reach.noDownstream': ['No downstream authored nodes', '没有下游图中节点'],
+   'viewer.passport.reach.status': ['{direction} · {nodes} nodes · {links} links · max {hops} hops', '{direction} · {nodes} 个节点 · {links} 条连接 · 最深 {hops} 跳'],
+@@ -465,11 +465,11 @@
+   'viewer.lens.eyebrow': ['Semantic lens', '语义透镜'],
+-  'viewer.lens.title': ['Compare system roles', '比较系统角色'],
+-  'viewer.lens.close': ['Close semantic lens', '关闭语义透镜'],
+-  'viewer.lens.instruction': ['Choose up to two semantic kinds. One reveals its real traffic; two compare only direct authored relationships.', '最多选择两种语义类型。选择一种可显示其真实流量；选择两种只比较直接编写的关系。'],
+-  'viewer.lens.kinds': ['Semantic kinds', '语义类型'],
++  'viewer.lens.title': ['Compare system roles', '比较模块类型'],
++  'viewer.lens.close': ['Close semantic lens', '关闭类型比较'],
++  'viewer.lens.instruction': ['Choose up to two semantic kinds. One reveals its real traffic; two compare only direct authored relationships.', '最多选择两种模块类型。选择一种查看相连关系；选择两种比较它们之间的直接关系。'],
++  'viewer.lens.kinds': ['Semantic kinds', '模块类型'],
+   'viewer.lens.choose': ['Choose a kind to inspect its nodes and touching relationships.', '选择一种类型以检查其节点和相连关系。'],
+-  'viewer.lens.copy': ['Copy link to semantic lens', '复制语义透镜链接'],
+-  'viewer.lens.clear': ['Clear semantic lens', '清除语义透镜'],
+-  'viewer.lens.open': ['Open semantic lens', '打开语义透镜'],
+-  'viewer.lens.openActive': ['Open active semantic lens', '打开当前语义透镜'],
++  'viewer.lens.copy': ['Copy link to semantic lens', '复制类型比较链接'],
++  'viewer.lens.clear': ['Clear semantic lens', '清除类型比较'],
++  'viewer.lens.open': ['Open semantic lens', '打开类型比较'],
++  'viewer.lens.openActive': ['Open active semantic lens', '打开当前类型比较'],
+   'viewer.lens.legend': ['Semantic legend', '语义图例'],
+@@ -500,3 +500,3 @@
+   'viewer.radar.fullMap': ['{count} nodes · full map', '{count} 个节点 · 完整地图'],
+-  'viewer.radar.compacted': ['Radar compacted to avoid covering the Semantic Passport or MAP controls.', '已收紧雷达，避免遮挡语义护照或地图控件。'],
++  'viewer.radar.compacted': ['Radar compacted to avoid covering the Semantic Passport or MAP controls.', '已收紧雷达，避免遮挡节点详情或地图控件。'],
+   'viewer.radar.cancelWaiting': ['Cancel semantic radar waiting for more MAP space', '取消等待更多地图空间的语义雷达'],
+@@ -514,4 +514,4 @@
+   'viewer.nav.radar.short': ['MAP', '地图'],
+-  'viewer.nav.lens': ['Open semantic lens', '打开语义透镜'],
+-  'viewer.nav.lens.title': ['Semantic lens (L)', '语义透镜（L）'],
++  'viewer.nav.lens': ['Open semantic lens', '打开类型比较'],
++  'viewer.nav.lens.title': ['Semantic lens (L)', '类型比较（L）'],
+   'viewer.nav.lens.short': ['LENS', '透镜'],
+@@ -536,3 +536,3 @@
+   'viewer.nav.detail.map': ['Zoom in to reveal relationship labels and node context', '放大以显示关系标签和节点上下文'],
+-  'viewer.nav.detail.read': ['Zoom in again to reveal tags and annotations', '再次放大以显示标签和注释'],
++  'viewer.nav.detail.read': ['Diagram overview; zoom in for easier reading', '全图概览；可放大或打开文字阅读'],
+   'viewer.nav.detail.full': ['Full diagram detail', '完整图表详情'],
+--- a/renderers/shared/utils.mjs
++++ b/renderers/shared/utils.mjs
+@@ -95,3 +95,3 @@
+           <div class="card-dot ${esc(card.dot)}"></div>
+-          <h3>${esc(card.title)}</h3>
++          <h2>${esc(card.title)}</h2>
+         </div>
