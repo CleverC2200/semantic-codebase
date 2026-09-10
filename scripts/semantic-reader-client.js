@@ -25,7 +25,7 @@
   const openFiles = new Set([initialFile]), expanded = new Set([D.sourceRoot, ...(initialFile ?? '').split('/').slice(0,-1).map((_,i)=>(initialFile ?? '').split('/').slice(0,i+1).join('/'))]);
   const mainlineSelections = new Map();
   const filePreferences = new Map(), bookmarks = new Map(), returnContexts = [];
-  let activeBookmark = '', inspectorWidth = 440;
+  let activeBookmark = '', inspectorWidth = Math.max(400, Math.min(680, (window.innerWidth - 284) * 0.44));
   let loadGeneration = 0, retryLoad = null, analysisFacts = D.facts;
   function rebuildAnalysis() {
     if (analysisFacts === D.facts) return;
@@ -97,7 +97,7 @@
     savePosition();
     if (remember && (S.context !== 'file' || S.file !== path)) rememberContext();
     const pref = preference(path);
-    S = { ...S, context: 'file', file: path, mode: pref.mode, reader: null, fn: key ?? pref.fn, detail: key ? 'fn' : null, node: null, edge: null };
+    S = { ...S, context: 'file', file: path, mode: pref.mode, reader: null, fn: key ?? pref.fn, detail: key ? 'fn' : null, fileSourceKey: null, node: null, edge: null };
     graphSelection = null; revealFile(path); closeNavigation(); render();
     announce('正在阅读 ' + path.split('/').pop());
   }
@@ -202,7 +202,7 @@
     savePosition(); S.mode = mode;
     preference().internal = mode === 'graph' ? S.reader : null;
     if (!S.reader) preference().mode = mode;
-    S.detail = S.reader && window.innerWidth > 1180 ? 'fn' : null;
+    S.detail = null;
     S.fn = S.reader ?? preference().fn;
     graphSelection = null; render();
   }
@@ -212,7 +212,7 @@
     savePosition();
     if (S.context !== 'file' || (S.mode === 'graph' && !S.reader) || S.file !== d.file_path) rememberContext();
     const same = S.reader === key;
-    S = { ...S, context: 'file', file: d.file_path, reader: key, fn: key, mode: same ? S.mode : 'text', detail: window.innerWidth > 1180 ? 'fn' : null, node: null, edge: null };
+    S = { ...S, context: 'file', file: d.file_path, reader: key, fn: key, mode: same ? S.mode : 'text', detail: null, node: null, edge: null };
     preference().fn = key; preference().internal = S.mode === 'graph' ? key : null;
     graphSelection = null; revealFile(d.file_path); closeNavigation(); render();
     $('inspector').scrollTop = 0;
@@ -289,7 +289,7 @@
     return `<div class="io-block">${inputHtml}<div class="io-output"><strong>输出</strong><div class="io-output-content"><p>${E(p?.output??(sig?.output==='void'?'无返回值；是否存在副作用见处理逻辑。':sig?.output?'返回类型见下方声明。':'返回类型尚未提取，请查看函数声明。'))}</p>${sig?.output?`<span class="muted">类型声明：</span><code>${E(sig.output)}</code>`:''}</div></div></div>${detailed&&p?`${p.logic?`<h3>处理逻辑</h3><p>${E(p.logic)}</p>`:''}${p.example?`<h3>使用示例</h3><p class="example">${E(p.example)}</p><p class="muted">示例为解释性示意，未在本次预览中执行。</p>`:''}`:''}`;
   }
   function compactIo(d){const sig=d.signature,p=d.presentation;return `<dl class="io-summary"><div><dt>输入</dt><dd>${sig?sig.inputs.length?sig.inputs.map(i=>`<code>${E(i.name)}${i.optional?'?':''}${i.type?': '+E(i.type):''}</code>`).join('；'):'无显式参数':p?.inputs?.map(i=>E(i.name)).join('、')||'见详情中的声明'}</dd></div><div><dt>输出</dt><dd>${E(p?.output??sig?.output??'返回类型待补齐')}</dd></div></dl>`;}
-  function fnRow(d){const sum=summary(d);return `<article class="function-row ${S.fn===d.definition_key?'selected':''}" data-related="${E(d.definition_key)}"><div class="row-header"><button class="fn-name" data-fn="${E(d.definition_key)}" aria-pressed="${S.fn===d.definition_key}">${E(d.qualified_name)}</button><span class="line">${d.line?'L'+d.line:'源码未核对'}</span></div><p class="function-purpose">${E(d.presentation?.purpose ?? '功能解释待补齐；可查看声明和源码。')}</p></article>`;}
+  function fnRow(d){const sum=summary(d);return `<article class="function-row ${S.fileSourceKey===d.definition_key?'selected':''}" data-related="${E(d.definition_key)}"><div class="row-header"><button class="fn-name" data-fn="${E(d.definition_key)}" aria-pressed="${S.fn===d.definition_key}">${E(d.qualified_name)}</button>${d.line ? `<button class="line" data-file-source="${E(d.definition_key)}" aria-pressed="${S.fileSourceKey===d.definition_key}" aria-label="定位 ${E(d.qualified_name)} 源码">定位源码 · L${d.line}</button>` : '<span class="line">源码未核对</span>'}</div><p class="function-purpose">${E(d.presentation?.purpose ?? '功能解释待补齐；可查看声明和源码。')}</p></article>`;}
   function fileView(){const file=D.files.find(f=>f.path===S.file);if(!file)return '<p class="empty">没有可查看文件。</p>';const fns=functions.filter(d=>d.file_path===S.file);
     let groups='';let previous;
     for(const row of M.fileCatalogue(S.file, preference().fileOrder)) {
@@ -298,24 +298,24 @@
     }
 
     const other=D.definitions.filter(d=>d.file_path===S.file&&!['function','method'].includes(d.kind));
-    return `<div class="breadcrumb">${E(S.file)}</div><h1>${E(S.file.split('/').pop())}</h1>${file.presentation?`<section class="file-explanation"><p class="source-status">AI 推断 · 未验证 · ${E(sourceVersion(file))}</p><h2>这个文件负责什么</h2><p>${E(file.presentation.purpose)}</p><h2>在项目中的作用</h2><p>${E(file.presentation.role)}</p><p class="muted">${E(file.presentation.boundary)}</p></section>`:`<p class="lede">文件职责解释尚未生成；本文件提取到 ${fns.length} 个函数或方法。</p>`}<details class="explanation-origin"><summary>AI 解释与分析范围</summary><p>文件职责及已补齐的函数说明属于 llm_inferred、未验证的展示解释，绑定当前源码哈希。参数和返回类型来自已有编译器事实。未补齐的函数仍使用静态事实摘要；示例没有实际执行。</p><p>${file.verified?'本地源码与快照一致。':'本地源码缺失或与快照不符。'}整体分析覆盖为 partial。</p></details><div class="section-title"><h2>函数目录 · ${fns.length}</h2><label class="catalogue-order">顺序 <select id="file-order"><option value="source" ${preference().fileOrder !== 'group' ? 'selected' : ''}>源码顺序</option><option value="group" ${preference().fileOrder === 'group' ? 'selected' : ''}>源码归属分组</option></select></label></div>${groups||'<p class="empty">未抽取到函数；可查看下方文件源码及其他定义。</p>'}<details class="details"><summary>其他定义 · ${other.length}</summary>${other.map(d=>`<p><code>${E(d.qualified_name)}</code> · ${E(d.kind)}</p>`).join('')}</details><details class="details"><summary>完整文件源码</summary>${sourceHtml(file,null)}</details>`;
+    return `<div class="breadcrumb">${E(S.file)}</div><h1>${E(S.file.split('/').pop())}</h1>${file.presentation?`<section class="file-explanation"><p class="source-status">AI 推断 · 未验证 · ${E(sourceVersion(file))}</p><h2>这个文件负责什么</h2><p>${E(file.presentation.purpose)}</p><h2>在项目中的作用</h2><p>${E(file.presentation.role)}</p><p class="muted">${E(file.presentation.boundary)}</p></section>`:`<p class="lede">文件职责解释尚未生成；本文件提取到 ${fns.length} 个函数或方法。</p>`}<details class="explanation-origin"><summary>AI 解释与分析范围</summary><p>文件职责及已补齐的函数说明属于 llm_inferred、未验证的展示解释，绑定当前源码哈希。参数和返回类型来自已有编译器事实。未补齐的函数仍使用静态事实摘要；示例没有实际执行。</p><p>${file.verified?'本地源码与快照一致。':'本地源码缺失或与快照不符。'}整体分析覆盖为 partial。</p></details><div class="section-title"><h2>函数目录 · ${fns.length}</h2><label class="catalogue-order">顺序 <select id="file-order"><option value="source" ${preference().fileOrder !== 'group' ? 'selected' : ''}>源码顺序</option><option value="group" ${preference().fileOrder === 'group' ? 'selected' : ''}>源码归属分组</option></select></label></div>${groups||'<p class="empty">未抽取到函数；可查看右侧文件源码及其他定义。</p>'}<details class="details"><summary>其他定义 · ${other.length}</summary>${other.map(d=>`<p><code>${E(d.qualified_name)}</code> · ${E(d.kind)}</p>`).join('')}</details>`;
   }
 
   function dataFlowHtml(key) {
     if (!loader.hasDefinition(key)) return deferredAnalysis(key);
     const result = M.dataFlow(key);
     const proof = ids => ids.map(id => { const e = D.evidence[id]; return e ? `<span>${E(e.file_path)} · L${e.line ?? '?'} </span>` : '<span>证据缺失</span>'; }).join('');
-    return `<details class="details"><summary>关键数据与写入 · ${E(label(key))}</summary><p class="muted">参数、局部值依赖与已有调用映射；${result.status}。状态写入单列，不推测参数必然写入某处。</p><h3>输入与返回</h3><p>${result.parameters.map(p => E(p.name)).join('、') || '参数来源未提取'}</p>${result.returns.map(r => `<p>${E(r.parameter)} → 返回值</p><p class="muted">${proof(r.evidence_ids)}</p>`).join('') || '<p class="muted">没有提取到参数至返回值的映射。</p>'}<h3>局部值变化</h3>${result.routes.filter(r => r.from !== r.to).map(r => `<p><code>${E(r.from)}</code> → <code>${E(r.to)}</code> · 静态值依赖</p><p class="muted">${proof(r.evidence_ids)}</p>`).join('') || '<p class="muted">没有可展示的跨变量传递。</p>'}<h3>调用中的数据交接</h3>${result.calls.map(f => `<section class="call-detail"><p>${E(label(f.value.target_definition_key))} · ${E(f.value.status)}</p>${(f.value.bindings ?? []).map(b => `<p><code>${E(b.argument_expression ?? '参数未提取')}</code> → <code>${E(b.parameter_name)}</code></p>`).join('')}${(f.value.mappings ?? []).map(m => `<p>${E(m.parameter_name)} → ${E(m.result_binding ?? '返回结果')} ${m.default_applicability ? ' · 默认值条件：' + E(m.default_applicability) : ''}</p>`).join('')}${factProof(f)}</section>`).join('') || '<p class="muted">跨函数传播未提取。</p>'}<h3>写入与外部副作用</h3>${result.writes.map(f => `<p>${E(f.value.effect_kind)} · ${E(f.value.operation)}</p>${factProof(f)}`).join('') || '<p class="muted">未提取到不代表没有副作用。</p>'}<p class="muted">${result.truncated ? '展示已截断。' : ''}${result.unknowns.map(E).join('、')}</p>${result.local ? factProof(result.local) : ''}</details>`;
+    return `<details class="details"><summary>关键数据与写入 · ${E(label(key))}</summary><p class="muted">参数、局部值依赖与已有调用映射；${result.status}。状态写入单列，不推测参数必然写入某处。</p><h3>输入与返回</h3><p>${result.parameters.map(p => E(p.name)).join('、') || '参数来源未提取'}</p>${result.returns.map(r => `<p>${E(r.parameter)} → 返回值</p><p class="muted">${proof(r.evidence_ids)}</p>`).join('') || '<p class="muted">没有提取到参数至返回值的映射。</p>'}<h3>局部值变化</h3>${result.routes.filter(r => r.from !== r.to).map(r => `<p><code>${E(r.from)}</code> → <code>${E(r.to)}</code> · 静态值依赖</p><p class="muted">${proof(r.evidence_ids)}</p>`).join('') || '<p class="muted">没有可展示的跨变量传递。</p>'}<h3>调用中的数据交接</h3>${result.calls.map(f => `<section class="call-detail"><p>${E(label(f.value.target_definition_key))} · ${E(f.value.status)}</p>${(f.value.bindings ?? []).map(b => `<p><code>${E(b.argument_expression ?? '参数未提取')}</code> → <code>${E(b.parameter_name)}</code></p>`).join('')}${(f.value.mappings ?? []).map(m => `<p>${E(m.parameter_name)} → ${E(m.result_binding ?? '返回结果')} ${m.default_applicability ? ' · 默认值条件：' + E(m.default_applicability) : ''}</p>`).join('')}</section>`).join('') || '<p class="muted">跨函数传播未提取。</p>'}<h3>写入与外部副作用</h3>${result.writes.map(f => `<p>${E(f.value.effect_kind)} · ${E(f.value.operation)}</p>`).join('') || '<p class="muted">未提取到不代表没有副作用。</p>'}<p class="muted">${result.truncated ? '展示已截断。' : ''}${result.unknowns.map(E).join('、')}</p></details>`;
   }
   function impactHtml(key) {
     if (!loader.hasCalls()) return deferredCalls();
     const result = risk.impact(key);
-    return `<section class="impact-section"><h2>已知调用影响范围</h2><p>${result.directCallers.length} 个直接调用者 · ${result.directCallSites} 处调用位置${result.selfCallSites ? ' · ' + result.selfCallSites + ' 处自身递归' : ''}</p><p class="muted">向上最多 ${result.budget.maxDepth} 层，${result.budget.maxNodes} 个定义；${result.reached.length} 个已知可达调用者。${result.completeness.status === 'truncated' ? '结果已截断：' + result.completeness.reasons.map(E).join('、') : '预算内遍历完成'}，Coverage：${E(result.coverage.status)}。</p>${result.featureMappings?.length ? `<p>关联功能（非已确认行为影响）：${result.featureMappings.map(c => E(c.title) + ' · ' + E(c.status)).join('、')}</p>` : '<p class="muted">跨功能范围尚无足够映射。</p>'}<details class="details"><summary>核对影响路径 · ${result.paths.length}</summary>${result.paths.map(path => `<article class="call-detail"><div class="links">${path.keys.map(fnLink).join('<span>→</span>')}</div>${path.facts.map(factProof).join('')}</article>`).join('') || '<p>本次未提取到，不代表没有调用。</p>'}</details><p class="muted">仅调用关系范围；数据库、配置、事件、动态调用等可能未覆盖，不代表完整爆炸半径。</p></section>`;
+    return `<section class="impact-section"><h2>已知调用影响范围</h2><p>${result.directCallers.length} 个直接调用者 · ${result.directCallSites} 处调用位置${result.selfCallSites ? ' · ' + result.selfCallSites + ' 处自身递归' : ''}</p><p class="muted">向上最多 ${result.budget.maxDepth} 层，${result.budget.maxNodes} 个定义；${result.reached.length} 个已知可达调用者。${result.completeness.status === 'truncated' ? '结果已截断：' + result.completeness.reasons.map(E).join('、') : '预算内遍历完成'}，Coverage：${E(result.coverage.status)}。</p>${result.featureMappings?.length ? `<p>关联功能（非已确认行为影响）：${result.featureMappings.map(c => E(c.title) + ' · ' + E(c.status)).join('、')}</p>` : '<p class="muted">跨功能范围尚无足够映射。</p>'}<details class="details"><summary>核对影响路径 · ${result.paths.length}</summary>${result.paths.map(path => `<article class="call-detail"><div class="links">${path.keys.map(fnLink).join('<span>→</span>')}</div></article>`).join('') || '<p>本次未提取到，不代表没有调用。</p>'}</details><p class="muted">仅调用关系范围；数据库、配置、事件、动态调用等可能未覆盖，不代表完整爆炸半径。</p></section>`;
   }
   function importanceHtml(key) {
     if (!loader.hasDefinition(key)) return deferredAnalysis(key);
     const result = risk.importance(key), reversible = { irreversible: '已标注难以恢复', reversible: '已标注可恢复', read_only: '已确认只读范围', state_write: '存在状态写入 · 恢复能力未知', external_unknown: '存在外部副作用 · 恢复能力未知', unknown: '写入与恢复边界待核查' };
-    return `<div class="importance-summary">${result.sensitivity.slice(0, 2).map(s => `<span class="importance-tag">${E(s.label)} · ${s.status === 'confirmed' ? '已确认' : '待核实'}</span>`).join('')}<span>${reversible[result.reversibility]}</span></div><details class="explanation-origin"><summary>重要性依据与边界</summary>${result.sensitivity.map(s => `<p>${E(s.label)}：${E(s.reason ?? '')} · ${s.status === 'confirmed' ? '人工标注' : '候选'}${s.actor ? ' · ' + E(s.actor) : ''}</p>${(s.evidence_ids ?? []).map(id => { const e = D.evidence[id]; return e ? `<p>${E(e.file_path)} · L${e.line ?? '?'}</p>` : ''; }).join('')}`).join('')}${result.effects.map(f => `<p>${E(f.value.effect_kind)}：${E(f.value.operation)}</p>${factProof(f)}`).join('')}<p>${result.unknowns.map(E).join('、')}</p></details>`;
+    return `<div class="importance-summary">${result.sensitivity.slice(0, 2).map(s => `<span class="importance-tag">${E(s.label)} · ${s.status === 'confirmed' ? '已确认' : '待核实'}</span>`).join('')}<span>${reversible[result.reversibility]}</span></div><details class="explanation-origin"><summary>重要性依据与边界</summary>${result.sensitivity.map(s => `<p>${E(s.label)}：${E(s.reason ?? '')} · ${s.status === 'confirmed' ? '人工标注' : '候选'}${s.actor ? ' · ' + E(s.actor) : ''}</p>${(s.evidence_ids ?? []).map(id => { const e = D.evidence[id]; return e ? `<p>${E(e.file_path)} · L${e.line ?? '?'}</p>` : ''; }).join('')}`).join('')}${result.effects.map(f => `<p>${E(f.value.effect_kind)}：${E(f.value.operation)}</p>`).join('')}<p>${result.unknowns.map(E).join('、')}</p></details>`;
   }
   function functionView() {
     const d = defs.get(S.reader), sum = summary(d);
@@ -324,7 +324,6 @@
   }
 
   function sourceHtml(file,d,range){if(typeof file?.source!=='string')return '<p class="empty">本地源码缺失或哈希与快照不符，不能作为此版本的源码展示。</p>';const lines=file.source.split('\n');const start=d?.line?Math.max(1,d.line-2):1;const end=d?.endLine?Math.min(lines.length,d.endLine+2):lines.length;return `<div class="source ${wrapSource?'wrapped':''}" tabindex="0" aria-label="源码，使用左右方向键滚动">${lines.slice(start-1,end).map((line,i)=>{const n=start+i;return `<span class="source-line ${range?n>=range.start&&n<=range.end?'active':'':d&&n>=d.line&&n<=d.endLine?'active':''}"><b>${n}</b>${E(line)||' '}</span>`;}).join('')}</div>`;}
-  function factProof(f){return `<details><summary>来源与证据</summary><span class="tag">${E(f.basis.kind)}</span>${f.evidence_ids.map(id=>{const e=D.evidence[id];return e?`<p class="muted">${E(e.file_path)} · ${e.line?'L'+e.line:'字节 '+e.span.start_byte+'–'+e.span.end_byte}</p>`:'';}).join('')}<details><summary>原始解析</summary><pre>${E(JSON.stringify(f,null,2))}</pre></details></details>`;}
   function currentGraph() {
     const pref = preference();
     const key = S.context === 'mainline' ? 'mainline:' + S.mainline : String(Boolean(pref.rawControl)) + ':' + S.file + ':' + S.mode + ':' + (S.mode === 'calls' ? S.reader : pref.internal ?? 'file') + ':' + pref.expanded.join(',');
@@ -425,12 +424,23 @@
     if (!items.length) return '<p>本次未提取到，不代表不存在。</p>';
     return items.map(f => `<section class="call-detail"><p>${direction === 'incoming' ? fnLink(f.subject.definition_key) : defs.has(f.value.target_definition_key) ? fnLink(f.value.target_definition_key) : `<code>${E(f.value.call)}</code> · 目标未解析`}</p>${direction === 'outgoing' ? `<p>参数：<code>${E((f.value.argument_expressions ?? []).join('；') || '未提取参数')}</code></p><p>结果：<code>${E(f.value.result_binding ?? (f.value.returned_directly ? '直接返回' : '未提取绑定'))}</code></p>` : ''}${factProof(f)}</section>`).join('');
   }
+  const fileSourcePinned = () => S.context === 'file' && !S.reader && S.mode === 'text';
+  const contextPinned = () => S.context === 'file' && (Boolean(S.reader) || fileSourcePinned());
   function inspector() {
+    if (fileSourcePinned()) S.detail = 'file';
+    else if (contextPinned() && !S.detail) { S.detail = 'fn'; S.fn = S.reader; }
+    document.querySelector('.workspace').classList.toggle('context-pinned', contextPinned());
     const panel = $('inspector'); panel.hidden = !S.detail; $('inspector-resize').hidden = !S.detail;
     detailNavigation = null;
     if (!S.detail) { panel.innerHTML = ''; return; }
     let title = '', body = '';
-    if (S.detail === 'group-evidence') {
+    if (S.detail === 'file') {
+      const file = D.files.find(f => f.path === S.file);
+      title = S.file.split('/').pop();
+      const selected = defs.get(S.fileSourceKey);
+      const range = selected?.file_path === S.file && selected.line ? { start: selected.line, end: selected.endLine ?? selected.line } : undefined;
+      body = `<p class="breadcrumb">${E(S.file)}</p><div class="section-title"><h3>完整文件源码</h3><button data-wrap aria-pressed="${wrapSource}">自动换行：${wrapSource ? '开' : '关'}</button></div>${sourceHtml(file, null, range)}`;
+    } else if (S.detail === 'group-evidence') {
       const e = D.evidence[S.groupEvidence], file = D.files.find(f=>f.path===e?.file_path);
       if (!e || !file?.verified || file.source_digest !== e.source_digest) { panel.innerHTML = '<p>来源版本无法核对。</p>'; return; }
       const bytes = new TextEncoder().encode(file.source), decode = end => new TextDecoder().decode(bytes.slice(0,end)).split('\n').length;
@@ -460,21 +470,21 @@
     } else if (S.detail === 'node') {
       const node = graph?.nodes.find(n => n.id === S.node); if (!node) return;
       title = node.title;
-      body = `<h2>${E(title)}</h2><p>${E(node.description)}</p>${node.kind === 'group' ? `<button data-expand-group="${E(node.id)}">展开分组中的函数</button>` : ''}${node.keys?.length ? `<h3>相关定义</h3><div class="links">${node.keys.map(fnLink).join('')}</div>` : ''}${node.file ? `<p class="breadcrumb">${E(node.file)}</p>` : ''}${node.block ? `<h3>步骤源码</h3><pre>${E(node.block.source_excerpt ?? '入口或出口，无独立执行语句。')}</pre>` : ''}<h3>来源与边界</h3>${node.kind === 'unknown' ? '<p>调用位置存在，但目标没有解析到函数定义。不能据此判断目标不存在或补出下游路线。</p>' : ''}${node.facts.map(factProof).join('') || '<p>分组由当前快照中的函数归属生成。</p>'}`;
+      body = `<h2>${E(title)}</h2><p>${E(node.description)}</p>${node.kind === 'group' ? `<button data-expand-group="${E(node.id)}">展开分组中的函数</button>` : ''}${node.keys?.length ? `<h3>相关定义</h3><div class="links">${node.keys.map(fnLink).join('')}</div>` : ''}${node.file ? `<p class="breadcrumb">${E(node.file)}</p>` : ''}${node.block ? `<h3>步骤源码</h3><pre>${E(node.block.source_excerpt ?? '入口或出口，无独立执行语句。')}</pre>` : ''}${['unknown', 'group'].includes(node.kind) ? '<h3>说明</h3>' : ''}${node.kind === 'unknown' ? '<p>调用位置存在，但目标没有解析到函数定义。不能据此判断目标不存在或补出下游路线。</p>' : ''}${node.kind === 'group' ? '<p>按函数所属定义分组。</p>' : ''}`;
     } else if (S.detail === 'edge') {
       const edge = graph?.edges.find(e => e.id === S.edge); if (!edge) return;
       title = edge.label;
       const from = graph.nodes.find(n => n.id === edge.from), to = graph.nodes.find(n => n.id === edge.to);
-      body = `<h2>${E(title)}</h2><p>${E(from.title)} → ${E(to.title)}</p>${graph.type === 'file' ? `<p>共 ${edge.facts.length} 处调用；分组连线可能汇总多个函数间的调用，不表示执行顺序。</p>${callsHtml(edge.facts, 'outgoing')}` : graph.type === 'control' ? `<p>静态控制关系：<code>${E(edge.raw.kind)}</code>。表示可能的控制转移，不代表已经执行。</p>${edge.facts.map(factProof).join('')}` : `<p>源码支持的阶段衔接；分支标签与阶段划分属于未验证的阅读说明。</p>${sourceReferences([...(from.refs ?? []), ...(to.refs ?? [])])}`}`;
+      body = `<h2>${E(title)}</h2><p>${E(from.title)} → ${E(to.title)}</p>${graph.type === 'file' ? `<p>共 ${edge.facts.length} 处调用；分组连线可能汇总多个函数间的调用，不表示执行顺序。</p>${callsHtml(edge.facts, 'outgoing')}` : graph.type === 'control' ? `<p>静态控制关系：<code>${E(edge.raw.kind)}</code>。表示可能的控制转移，不代表已经执行。</p>` : `<p>源码支持的阶段衔接；分支标签与阶段划分属于未验证的阅读说明。</p>${sourceReferences([...(from.refs ?? []), ...(to.refs ?? [])])}`}`;
     }
-    panel.innerHTML = `<div class="detail-head"><strong class="detail-context">${E(title)}</strong><button data-close>关闭详情 · Esc</button>${S.detail === 'fn' ? '<div class="detail-nav"><button data-detail-section="source">源码</button><button data-detail-section="relations">调用关系</button><button data-detail-section="evidence">证据</button></div>' : ''}</div>${body}`;
+    panel.innerHTML = `<div class="detail-head"><strong class="detail-context">${E(title)}</strong>${contextPinned() ? `<span class="context-fixed-label">${fileSourcePinned() ? '文件源码' : '函数上下文'}</span>` : '<button data-close>关闭详情 · Esc</button>'}${S.detail === 'fn' ? '<div class="detail-nav"><button data-detail-section="source">源码</button><button data-detail-section="relations">调用关系</button></div>' : ''}</div>${body}`;
     syncDetailNav();
   }
   function syncDetailNav() {
     const panel = $('inspector'); if (S.detail !== 'fn') return;
     const boundary = panel.getBoundingClientRect().top + (panel.querySelector('.detail-head')?.offsetHeight ?? 0) + 24;
     let active = 'source';
-    for (const name of ['source', 'relations', 'evidence']) if ($('detail-' + name)?.getBoundingClientRect().top <= boundary) active = name;
+    for (const name of ['source', 'relations']) if ($('detail-' + name)?.getBoundingClientRect().top <= boundary) active = name;
     if (detailNavigation) active = detailNavigation;
     panel.querySelectorAll('[data-detail-section]').forEach(b => b.setAttribute('aria-current', b.dataset.detailSection === active ? 'location' : 'false'));
   }
@@ -488,7 +498,7 @@
   for (const event of ['wheel', 'touchstart', 'keydown', 'pointerdown']) $('inspector').addEventListener(event, () => { detailNavigation = null; syncDetailNav(); }, { passive: true });
   function contextBar() {
     const back = returnContexts.at(-1);
-    $('context-bar').innerHTML = `${back ? `<button data-context-return>返回 ${E(back.context === 'requirements' ? '需求核对' : back.context === 'overview' ? '项目总览' : back.context === 'comparison' ? '本次变更' : back.context === 'capability' ? capabilities.get(back.capability)?.title ?? '待归类' : back.context === 'mainline' ? mainlines.find(m => m.id === back.mainline)?.title ?? '主线' : back.reader ? label(back.reader) : back.file.split('/').pop() + (back.mode === 'graph' ? ' · 关系图' : ''))}</button>` : ''}${S.reader ? `<nav class="object-breadcrumb" aria-label="当前阅读对象"><button data-reader-file>${E(S.file.split('/').pop())}</button><span>› ${E(label(S.reader))}</span></nav><button data-show-source>查看源码与依据</button>` : ''}`;
+    $('context-bar').innerHTML = `${back ? `<button data-context-return>返回 ${E(back.context === 'requirements' ? '需求核对' : back.context === 'overview' ? '项目总览' : back.context === 'comparison' ? '本次变更' : back.context === 'capability' ? capabilities.get(back.capability)?.title ?? '待归类' : back.context === 'mainline' ? mainlines.find(m => m.id === back.mainline)?.title ?? '主线' : back.reader ? label(back.reader) : back.file.split('/').pop() + (back.mode === 'graph' ? ' · 关系图' : ''))}</button>` : ''}${S.reader ? `<nav class="object-breadcrumb" aria-label="当前阅读对象"><button data-reader-file>${E(S.file.split('/').pop())}</button><span>› ${E(label(S.reader))}</span></nav>` : ''}`;
   }
 
   function render(content = true) {
@@ -599,6 +609,12 @@
     const node = graph?.nodes.find(n => n.id === id); if (!node) return;
     savePosition(); graphSelection = id;
     if (S.context === 'mainline') selectStage(id);
+    else if (contextPinned() && graph.type === 'control') {
+      S.node = id; S.detail = 'fn'; S.fn = S.reader; render(false);
+      const panel = $('inspector'), source = panel.querySelector('.source-line.active');
+      if (source) panel.scrollTop += source.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.querySelector('.detail-head').offsetHeight - 16;
+      panel.querySelector('.source')?.focus({ preventScroll: true });
+    }
     else if (['function', 'external', 'definition', 'external-definition'].includes(node.kind)) selectFunction(node.keys[0]);
     else { S.node = id; S.detail = 'node'; render(false); $('inspector').scrollTop = 0; focusInspector(); }
   }
@@ -720,7 +736,18 @@
     else if (el.hasAttribute('data-graph-locate')) locateGraph();
     else if (el.hasAttribute('data-graph-fit')) { const canvas = $('graph-canvas'); setZoom(Math.min(1, (canvas.clientWidth - 24) / graph.width, (canvas.clientHeight - 24) / graph.height)); canvas.scrollLeft = 0; canvas.scrollTop = 0; savePosition(); }
     else if (el.dataset.zoom) setZoom(Number($('graph-canvas').dataset.zoom) + (el.dataset.zoom === 'in' ? 0.15 : -0.15));
-    else if (el.hasAttribute('data-close')) { S.detail = null; render(false); }
+    else if (el.hasAttribute('data-close') && !contextPinned()) { S.detail = null; render(false); }
+    else if (el.dataset.fileSource && fileSourcePinned()) {
+      const d = defs.get(el.dataset.fileSource); if (!d || d.file_path !== S.file || !d.line) return;
+      S.fileSourceKey = d.definition_key; inspector();
+      const panel = $('inspector'), source = panel.querySelector('.source-line.active');
+      if (source) panel.scrollTop += source.getBoundingClientRect().top - panel.getBoundingClientRect().top - panel.querySelector('.detail-head').offsetHeight - 16;
+      document.querySelectorAll('[data-file-source]').forEach(button => {
+        const selected = button.dataset.fileSource === d.definition_key;
+        button.setAttribute('aria-pressed', String(selected)); button.closest('.function-row').classList.toggle('selected', selected);
+      });
+      announce('已定位 ' + d.qualified_name + ' 源码，L' + d.line + '–' + (d.endLine ?? d.line));
+    }
     else if (el.hasAttribute('data-wrap')) { const top = $('inspector').scrollTop; wrapSource = !wrapSource; inspector(); $('inspector').scrollTop = top; }
     else if (el.dataset.detailSection) navigateDetail(el.dataset.detailSection);
     else if (el.hasAttribute('data-directory-toggle')) { const sidebar = document.querySelector('.sidebar'); sidebar.classList.toggle('mobile-open'); el.setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open'))); }
@@ -778,9 +805,10 @@
   document.addEventListener('scroll', event => { if (event.target.id === 'graph-canvas') savePosition(); }, { capture: true, passive: true });
   document.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('global-search-host').classList.add('search-open'); $('global-search').focus(); $('global-search').select(); }
-    if (event.key === 'Escape' && S.detail && !$('report-dialog').open) { event.preventDefault(); S.detail = null; render(false); }
+    if (event.key === 'Escape' && S.detail && !contextPinned() && !$('report-dialog').open) { event.preventDefault(); S.detail = null; render(false); }
   });
-  $('report').onclick = () => $('report-dialog').showModal(); $('close-report').onclick = () => $('report-dialog').close();
+  $('report').onclick = () => { if (!$('raw-reader-facts')) { const details = document.createElement('details'); details.id = 'raw-reader-facts'; const summary = document.createElement('summary'); summary.textContent = '原始分析与来源（调试）'; details.append(summary); details.addEventListener('toggle', () => { if (details.open && !details.querySelector('pre')) { const pre = document.createElement('pre'); pre.textContent = JSON.stringify({ snapshot: D.snapshot, loading: loader.status(), note: '仅当前已加载分析；完整阅读包请在变更阅读中导出。', facts: D.facts, evidence: D.evidence }, null, 2); details.append(pre); } }); $('report-dialog').append(details); } $('report-dialog').showModal(); }; $('close-report').onclick = () => $('report-dialog').close();
   window.addEventListener('resize', () => { if (window.innerWidth > 1180) resizeInspector(inspectorWidth); });
+  resizeInspector(inspectorWidth);
   render();
 })();

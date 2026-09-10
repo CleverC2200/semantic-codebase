@@ -130,6 +130,24 @@ export function createReaderGraphModel(data) {
     const ids = new Set(nodes.map(n => n.id));
     return { ...base, compact, nodes, edges: base.edges.filter(e => ids.has(e.from) && ids.has(e.to)) };
   }
+  function logicSteps(key) {
+    const graph = logicGraph(key);
+    const file = data.files?.find(f => f.path === definitions.get(key)?.file_path);
+    const bytes = file?.verified && typeof file.source === 'string' ? new TextEncoder().encode(file.source) : null;
+    const descriptions = { condition: '判断此条件，按成立或不成立进入对应路径。', branch: '判断此条件，按成立或不成立进入对应路径。', return: '返回这里构造的结果，并结束当前函数。', throw: '抛出此异常，正常路径在这里中止。', statement: '执行这条语句，再沿下方标出的去向继续。', loop: '检查迭代条件；进入循环体或结束循环。' };
+    const nodes = graph.nodes.filter(n => !['entry', 'exit'].includes(n.block.kind)).map(n => {
+      const evidence = data.evidence?.[n.block.evidence_id], span = evidence?.span;
+      const valid = bytes && evidence?.file_path === file.path && evidence.source_digest === file.source_digest && Number.isInteger(span?.start_byte) && Number.isInteger(span?.end_byte) && span.start_byte >= 0 && span.end_byte <= bytes.length && span.end_byte >= span.start_byte;
+      const iteration = graph.edges.some(e => e.from === n.id && e.raw?.kind === 'iteration');
+      return { ...n, title: n.inferred ? n.title : iteration ? '遍历集合' : ['condition', 'branch'].includes(n.block.kind) ? '判断条件' : ({statement:'处理数据',return:'返回结果',throw:'抛出异常'}[n.block.kind] ?? n.title),
+        description: n.inferred ? n.description : iteration ? '依次进入循环体；集合耗尽后走结束迭代的路径。' : descriptions[n.block.kind] ?? '核对此步骤的源码及后续去向。',
+        source: valid ? new TextDecoder().decode(bytes.subarray(span.start_byte, span.end_byte)) : null,
+        sourceLine: valid ? new TextDecoder().decode(bytes.subarray(0, span.start_byte)).split('\n').length : null,
+        sourcePosition: valid ? span.start_byte : null, evidenceId: n.block.evidence_id };
+    });
+    if (nodes.every(n => n.sourcePosition !== null)) nodes.sort((a,b) => a.sourcePosition - b.sourcePosition);
+    return { ...graph, nodes, orientation: 'vertical', file: file?.path };
+  }
   function dataFlow(key, { maxItems = 40 } = {}) {
     const limit = Number.isInteger(maxItems) ? Math.max(1, Math.min(200, maxItems)) : 40;
     const own = data.facts.filter(f => f.subject.definition_key === key), local = own.find(f => f.kind === 'data_flow');
@@ -203,7 +221,7 @@ export function createReaderGraphModel(data) {
     }
     return { nodes, edges };
   }
-  return { definitions, functions, calls, controls, fileCatalogue, groups, fileGraph, functionCalls, controlGraph, logicGraph, flowOverview, dataFlow, flowBoundaries, flowRoute, flowObservations, neighbors };
+  return { definitions, functions, calls, controls, fileCatalogue, groups, fileGraph, functionCalls, controlGraph, logicGraph, logicSteps, flowOverview, dataFlow, flowBoundaries, flowRoute, flowObservations, neighbors };
 }
 
 // Collapse cycles before assigning columns. Position depends on data, not selection or panel width.
