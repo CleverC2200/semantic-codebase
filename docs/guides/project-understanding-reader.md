@@ -65,6 +65,8 @@ node scripts/render-reader-archify.mjs /absolute/path/to/reader-data.json MAINLI
 
 生成器核对源文件摘要与指定 Git revision，不以当前 HEAD 替代旧版本。旧阅读包可使用旁边的 receipt.json 恢复来源身份，但 Snapshot、Overlay 与完整文件清单必须吻合；目录样本缺少真实 revision 时不能导出来源已核对的 Archify 图。
 
+已有中文 OA 架构图需要复现桌面阅读修复时，使用独立的 [OA 桌面 renderer 配置](oa-architecture-desktop.md)。它通过新目录和摘要清单保存经过审阅的工具副本，显式启用，不改变这里的默认 Reader 导出。
+
 本轮最多展示 12 个绑定节点，超出预算会明确拒绝，要求更小的来源绑定主线。未解析、候选、partial 与运行观测不补画为确定连线；阶段始终标记为未验证推断。生成失败不覆盖任何已交付目录。服务只监听 127.0.0.1，只处理固定包内主线 ID；不执行被索引应用、不调用模型，也不接收任意源码或命令。结束预览可用 Ctrl-C 停止服务。
 
 HTML 交付、自动浏览器检查和视觉检查是三份独立证据，不能互相替代；具体结果与限制见 [本轮收据](../receipts/archify-reader-followup-2026-09-09.md)。
